@@ -18,7 +18,8 @@ import {
   LogOut,
   Loader,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  UploadCloud
 } from 'lucide-react';
 
 // ==========================================
@@ -32,6 +33,19 @@ const DISCOVERY_DOCS = [
   'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
 ];
 const SPREADSHEET_NAME = 'Beetle_Manager_DB';
+
+// --- Helper: Convert Base64 to Blob for Upload ---
+const base64ToBlob = (base64Data) => {
+  const parts = base64Data.split(';base64,');
+  const contentType = parts[0].split(':')[1];
+  const raw = window.atob(parts[1]);
+  const rawLength = raw.length;
+  const uInt8Array = new Uint8Array(rawLength);
+  for (let i = 0; i < rawLength; ++i) {
+    uInt8Array[i] = raw.charCodeAt(i);
+  }
+  return new Blob([uInt8Array], { type: contentType });
+};
 
 // --- UI Components ---
 
@@ -117,6 +131,7 @@ export default function App() {
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [statusMsg, setStatusMsg] = useState(''); // Loading status message
   const [errorMsg, setErrorMsg] = useState('');
   
   // Google Auth State
@@ -126,7 +141,7 @@ export default function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [spreadsheetId, setSpreadsheetId] = useState(null);
-  const [sheetName, setSheetName] = useState('Sheet1'); // Add dynamic sheet name state
+  const [sheetName, setSheetName] = useState('Sheet1'); 
 
   // Form State
   const [formData, setFormData] = useState({
@@ -217,11 +232,10 @@ export default function App() {
         throw (resp);
       }
       setIsSignedIn(true);
-      setUserProfile({ email: "Google User" }); // Simplified profile
+      setUserProfile({ email: "Google User" }); 
       await syncWithGoogleSheets();
     };
 
-    // Force prompt to ensure user sees the checkboxes for permissions
     if (window.gapi.client.getToken() === null) {
       tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
@@ -242,17 +256,46 @@ export default function App() {
     }
   };
 
+  // --- Upload Image to Drive ---
+  const uploadImageToDrive = async (base64Data, filename) => {
+    const blob = base64ToBlob(base64Data);
+    const metadata = {
+      name: filename,
+      mimeType: blob.type,
+      // parents: ['root'] // Optional: specify folder ID
+    };
+
+    const accessToken = window.gapi.client.getToken().access_token;
+    const form = new FormData();
+    form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+    form.append('file', blob);
+
+    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webContentLink,thumbnailLink', {
+      method: 'POST',
+      headers: new Headers({ 'Authorization': 'Bearer ' + accessToken }),
+      body: form,
+    });
+
+    const result = await response.json();
+    if (result.error) throw result.error;
+    
+    // Construct a viewable thumbnail link. 
+    // thumbnailLink usually works but might expire or be small. 
+    // Using this hack for persistent thumbnail access via API key/token context
+    return `https://drive.google.com/thumbnail?authuser=0&sz=w1024&id=${result.id}`;
+  };
+
   // --- Google Sheets Sync Logic ---
 
   const syncWithGoogleSheets = async () => {
     setIsLoading(true);
+    setStatusMsg('正在同步資料...');
     setErrorMsg('');
     try {
         if (!window.gapi || !window.gapi.client || !window.gapi.client.drive) {
             throw new Error("Google API Client not ready");
         }
 
-        // 1. Find Spreadsheet
         let foundId = null;
         let currentSheetName = 'Sheet1';
 
@@ -264,14 +307,12 @@ export default function App() {
         if (response.result.files && response.result.files.length > 0) {
             foundId = response.result.files[0].id;
         } else {
-            // 2. Create Spreadsheet (Force Sheet1 name to avoid locale issues)
             const createResponse = await window.gapi.client.sheets.spreadsheets.create({
                 properties: { title: SPREADSHEET_NAME },
                 sheets: [{ properties: { title: 'Sheet1' } }]
             });
             foundId = createResponse.result.spreadsheetId;
             
-            // Add Header
             await window.gapi.client.sheets.spreadsheets.values.update({
                 spreadsheetId: foundId,
                 range: 'Sheet1!A1',
@@ -281,17 +322,15 @@ export default function App() {
         }
         setSpreadsheetId(foundId);
 
-        // 3. Detect actual sheet name (Critical for Chinese locale "工作表1" issue)
         const metaResponse = await window.gapi.client.sheets.spreadsheets.get({
             spreadsheetId: foundId,
             includeGridData: false
         });
         if (metaResponse.result.sheets && metaResponse.result.sheets.length > 0) {
             currentSheetName = metaResponse.result.sheets[0].properties.title;
-            setSheetName(currentSheetName); // Update state
+            setSheetName(currentSheetName);
         }
 
-        // 4. Fetch Data using dynamic sheet name
         const dataResponse = await window.gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: foundId,
             range: `${currentSheetName}!A2:C`,
@@ -311,33 +350,72 @@ export default function App() {
         handleApiError(e, "同步失敗");
     } finally {
         setIsLoading(false);
+        setStatusMsg('');
     }
   };
 
-  const saveToCloud = async (newData) => {
-      // Local save first
-      localStorage.setItem('beetle_app_data', JSON.stringify(newData));
-      setData(newData);
+  const processAndSaveData = async (newData) => {
+      setIsLoading(true);
+      
+      // Deep clone to modify
+      let processedData = JSON.parse(JSON.stringify(newData));
+      const imageFields = ['image', 'specimenImage', 'pupationImage', 'emergenceImage'];
 
-      // Cloud save
+      // If signed in, check for Base64 images and upload them
       if (isSignedIn && spreadsheetId) {
-          setIsLoading(true);
           try {
-            const rows = newData.map(item => [
+              let uploadCount = 0;
+              
+              // Helper to check and upload
+              const processItem = async (item) => {
+                  let modified = false;
+                  for (const field of imageFields) {
+                      if (item[field] && item[field].startsWith('data:image')) {
+                          setStatusMsg(`正在上傳圖片 (${++uploadCount})...`);
+                          try {
+                              const driveLink = await uploadImageToDrive(item[field], `beetle_${field}_${item.id}_${Date.now()}.jpg`);
+                              item[field] = driveLink; // Replace Base64 with Link
+                              modified = true;
+                          } catch (err) {
+                              console.error(`Failed to upload ${field} for ${item.id}`, err);
+                              // Keep Base64 if fail, or handle error
+                          }
+                      }
+                  }
+                  return item;
+              };
+
+              // Process all items (handle Promise.all for speed)
+              // Note: If array is huge, this might hit rate limits, but ok for personal use
+              processedData = await Promise.all(processedData.map(processItem));
+              
+          } catch (e) {
+              console.error("Image Upload Error:", e);
+              alert("部分圖片上傳失敗，將嘗試僅儲存文字資料。");
+          }
+      }
+
+      // Save to Local
+      localStorage.setItem('beetle_app_data', JSON.stringify(processedData));
+      setData(processedData);
+
+      // Save to Cloud
+      if (isSignedIn && spreadsheetId) {
+          setStatusMsg('正在儲存至試算表...');
+          try {
+            const rows = processedData.map(item => [
                 item.id,
                 JSON.stringify(item),
                 new Date().toISOString()
             ]);
 
-            const range = `${sheetName}!A2:C`; // Use dynamic sheet name
+            const range = `${sheetName}!A2:C`;
 
-            // Clear old data
             await window.gapi.client.sheets.spreadsheets.values.clear({
                 spreadsheetId: spreadsheetId,
                 range: range
             });
 
-            // Write new data
             if (rows.length > 0) {
                 await window.gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId: spreadsheetId,
@@ -351,20 +429,21 @@ export default function App() {
               handleApiError(e, "雲端儲存失敗");
           } finally {
               setIsLoading(false);
+              setStatusMsg('');
           }
+      } else {
+          setIsLoading(false);
+          setStatusMsg('');
       }
   };
 
   const handleApiError = (e, prefix) => {
       let msg = e.result?.error?.message || e.message || "未知錯誤";
       
-      // Customize error messages for users
       if (e.result?.error?.code === 403 || msg.includes("permission") || msg.includes("scope")) {
-          msg = "權限不足。請登出後重新登入，並勾選所有 Google Drive/Sheets 權限框框。";
-      } else if (msg.includes("API key not valid")) {
-          msg = "API 設定錯誤，請檢查 Client ID。";
-      } else if (msg.includes("Unable to parse range")) {
-          msg = "無法讀取工作表範圍，已自動嘗試修正，請再試一次。";
+          msg = "權限不足。請登出後重新登入，並勾選所有權限。";
+      } else if (msg.includes("limit")) {
+          msg = "儲存格大小限制。請確認圖片是否已正確上傳至 Drive。";
       }
 
       const fullMsg = `${prefix}: ${msg}`;
@@ -372,7 +451,7 @@ export default function App() {
       alert(fullMsg);
   };
 
-  // --- Original App Logic ---
+  // --- App Logic ---
 
   const handleAddItem = () => {
     setFormData({
@@ -428,14 +507,15 @@ export default function App() {
       newData = [...data, { ...formData, id: Date.now().toString() }];
     }
     
-    saveToCloud(newData);
+    // Replace saveToCloud with processAndSaveData
+    processAndSaveData(newData);
     setView('list');
   };
 
   const handleDelete = (id) => {
     if (confirm('確定要刪除這筆資料嗎？')) {
       const newData = data.filter(item => item.id !== id);
-      saveToCloud(newData);
+      processAndSaveData(newData);
       setView('list');
     }
   };
@@ -443,6 +523,7 @@ export default function App() {
   const handleImageUpload = (e, fieldName = 'image') => {
     const file = e.target.files[0];
     if (file) {
+      // Still read as Base64 for immediate local preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
@@ -632,12 +713,20 @@ export default function App() {
               </Button>
             </>
           )}
-          <Button variant="primary" onClick={handleSave} className="!px-6">
+          <Button variant="primary" onClick={handleSave} className="!px-6" disabled={isLoading}>
              {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />} 
-             {isLoading ? '同步中' : '儲存'}
+             {isLoading ? '處理中' : '儲存'}
           </Button>
         </div>
       </div>
+
+      {/* Status Bar for Uploads */}
+      {statusMsg && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 animate-pulse">
+              <UploadCloud size={16} />
+              <span>{statusMsg}</span>
+          </div>
+      )}
 
       {/* Main Info Section */}
       <div className="space-y-6">
@@ -1050,7 +1139,7 @@ export default function App() {
               </div>
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v1.3.0 (Cloud+Debug)</span>
+                  <span className="text-xs text-[#A09383]">v1.4.0 (Cloud+Upload)</span>
               </div>
           </div>
           
