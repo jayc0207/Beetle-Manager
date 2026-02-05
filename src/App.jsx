@@ -126,6 +126,7 @@ export default function App() {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [userProfile, setUserProfile] = useState(null);
   const [spreadsheetId, setSpreadsheetId] = useState(null);
+  const [sheetName, setSheetName] = useState('Sheet1'); // Add dynamic sheet name state
 
   // Form State
   const [formData, setFormData] = useState({
@@ -253,6 +254,8 @@ export default function App() {
 
         // 1. Find Spreadsheet
         let foundId = null;
+        let currentSheetName = 'Sheet1';
+
         const response = await window.gapi.client.drive.files.list({
             q: `name = '${SPREADSHEET_NAME}' and mimeType = 'application/vnd.google-apps.spreadsheet' and trashed = false`,
             fields: 'files(id, name)',
@@ -261,9 +264,10 @@ export default function App() {
         if (response.result.files && response.result.files.length > 0) {
             foundId = response.result.files[0].id;
         } else {
-            // 2. Create Spreadsheet
+            // 2. Create Spreadsheet (Force Sheet1 name to avoid locale issues)
             const createResponse = await window.gapi.client.sheets.spreadsheets.create({
                 properties: { title: SPREADSHEET_NAME },
+                sheets: [{ properties: { title: 'Sheet1' } }]
             });
             foundId = createResponse.result.spreadsheetId;
             
@@ -277,10 +281,20 @@ export default function App() {
         }
         setSpreadsheetId(foundId);
 
-        // 3. Fetch Data
+        // 3. Detect actual sheet name (Critical for Chinese locale "工作表1" issue)
+        const metaResponse = await window.gapi.client.sheets.spreadsheets.get({
+            spreadsheetId: foundId,
+            includeGridData: false
+        });
+        if (metaResponse.result.sheets && metaResponse.result.sheets.length > 0) {
+            currentSheetName = metaResponse.result.sheets[0].properties.title;
+            setSheetName(currentSheetName); // Update state
+        }
+
+        // 4. Fetch Data using dynamic sheet name
         const dataResponse = await window.gapi.client.sheets.spreadsheets.values.get({
             spreadsheetId: foundId,
-            range: 'Sheet1!A2:C',
+            range: `${currentSheetName}!A2:C`,
         });
 
         const rows = dataResponse.result.values;
@@ -315,17 +329,19 @@ export default function App() {
                 new Date().toISOString()
             ]);
 
+            const range = `${sheetName}!A2:C`; // Use dynamic sheet name
+
             // Clear old data
             await window.gapi.client.sheets.spreadsheets.values.clear({
                 spreadsheetId: spreadsheetId,
-                range: 'Sheet1!A2:C'
+                range: range
             });
 
             // Write new data
             if (rows.length > 0) {
                 await window.gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId: spreadsheetId,
-                    range: 'Sheet1!A2',
+                    range: `${sheetName}!A2`,
                     valueInputOption: 'USER_ENTERED',
                     resource: { values: rows }
                 });
@@ -347,6 +363,8 @@ export default function App() {
           msg = "權限不足。請登出後重新登入，並勾選所有 Google Drive/Sheets 權限框框。";
       } else if (msg.includes("API key not valid")) {
           msg = "API 設定錯誤，請檢查 Client ID。";
+      } else if (msg.includes("Unable to parse range")) {
+          msg = "無法讀取工作表範圍，已自動嘗試修正，請再試一次。";
       }
 
       const fullMsg = `${prefix}: ${msg}`;
