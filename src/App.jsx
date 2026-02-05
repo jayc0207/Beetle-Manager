@@ -16,14 +16,16 @@ import {
   Bell,
   Cloud,
   LogOut,
-  Loader
+  Loader,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 // ==========================================
-// CONFIGURATION - 請在此填入您的 Google Client ID
+// CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 請替換這裡
-const API_KEY = ''; // 通常前端 Auth 不需要 API Key，留空即可
+const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 請確認這裡已填入
+const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
   'https://sheets.googleapis.com/$discovery/rest?version=v4',
@@ -97,13 +99,13 @@ const SelectButton = ({ options, value, onChange }) => (
   </div>
 );
 
-// --- Google API Helper Functions (Mocked for Preview, Real Logic Included) ---
-// 這些函數負責處理 Google 雲端邏輯
+// --- Google API Helper Functions ---
 
 const loadGoogleScript = (callback) => {
   const script = document.createElement('script');
   script.src = 'https://apis.google.com/js/api.js';
   script.onload = () => callback();
+  script.onerror = () => console.error("Error loading GAPI script");
   document.body.appendChild(script);
 };
 
@@ -115,6 +117,7 @@ export default function App() {
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   // Google Auth State
   const [gapiInited, setGapiInited] = useState(false);
@@ -154,8 +157,12 @@ export default function App() {
   // --- Google Integration Logic ---
 
   useEffect(() => {
-    // 嘗試載入 Google API
-    // 注意：在 Code Sandbox 或無效網域中可能會失敗，因此我們會捕捉錯誤
+    // Load local data first
+    const savedData = localStorage.getItem('beetle_app_data');
+    if (savedData) {
+      setData(JSON.parse(savedData));
+    }
+
     try {
       loadGoogleScript(() => {
         if (window.gapi) {
@@ -163,7 +170,6 @@ export default function App() {
         }
       });
       
-      // Load GIS (Identity Services)
       const script2 = document.createElement('script');
       script2.src = 'https://accounts.google.com/gsi/client';
       script2.onload = () => {
@@ -171,24 +177,18 @@ export default function App() {
             const client = window.google.accounts.oauth2.initTokenClient({
                 client_id: CLIENT_ID,
                 scope: SCOPES,
-                callback: '', // defined later
+                callback: '', 
             });
             setTokenClient(client);
             setGisInited(true);
         } catch (e) {
-            console.warn("GIS Init failed (Expected in preview):", e);
+            console.warn("GIS Init failed:", e);
         }
       };
       document.body.appendChild(script2);
 
     } catch (e) {
       console.log("Google scripts failed to load", e);
-    }
-
-    // Load local data as fallback
-    const savedData = localStorage.getItem('beetle_app_data');
-    if (savedData) {
-      setData(JSON.parse(savedData));
     }
   }, []);
 
@@ -199,17 +199,15 @@ export default function App() {
             discoveryDocs: DISCOVERY_DOCS,
         });
         setGapiInited(true);
-        
-        // Check if already signed in (unlikely with implicit flow but good practice)
-        // Note: GIS flow handles this differently, usually needs user interaction first
     } catch (e) {
-        console.warn("GAPI init failed (Expected in preview if no API Key/Client ID):", e);
+        console.warn("GAPI init failed:", e);
     }
   };
 
   const handleAuthClick = () => {
+    setErrorMsg('');
     if (!tokenClient) {
-        alert("Google 服務初始化中或失敗，請檢查 Client ID 設定。");
+        alert("Google 服務初始化失敗。請檢查網路或 Client ID 設定。");
         return;
     }
 
@@ -218,12 +216,11 @@ export default function App() {
         throw (resp);
       }
       setIsSignedIn(true);
-      // Get user info mock or real
-      // Here we would typically fetch the profile
-      setUserProfile({ name: "Google User", email: "user@gmail.com" });
+      setUserProfile({ email: "Google User" }); // Simplified profile
       await syncWithGoogleSheets();
     };
 
+    // Force prompt to ensure user sees the checkboxes for permissions
     if (window.gapi.client.getToken() === null) {
       tokenClient.requestAccessToken({prompt: 'consent'});
     } else {
@@ -238,15 +235,22 @@ export default function App() {
       window.gapi.client.setToken('');
       setIsSignedIn(false);
       setUserProfile(null);
-      setData([]); // Clear data on logout? Or keep local? Let's clear for security
+      setData([]); 
+      setSpreadsheetId(null);
+      setErrorMsg('');
     }
   };
 
-  // --- Google Sheets Sync Logic (Simplified) ---
+  // --- Google Sheets Sync Logic ---
 
   const syncWithGoogleSheets = async () => {
     setIsLoading(true);
+    setErrorMsg('');
     try {
+        if (!window.gapi || !window.gapi.client || !window.gapi.client.drive) {
+            throw new Error("Google API Client not ready");
+        }
+
         // 1. Find Spreadsheet
         let foundId = null;
         const response = await window.gapi.client.drive.files.list({
@@ -257,20 +261,18 @@ export default function App() {
         if (response.result.files && response.result.files.length > 0) {
             foundId = response.result.files[0].id;
         } else {
-            // 2. Create Spreadsheet if not exists
+            // 2. Create Spreadsheet
             const createResponse = await window.gapi.client.sheets.spreadsheets.create({
                 properties: { title: SPREADSHEET_NAME },
             });
             foundId = createResponse.result.spreadsheetId;
             
-            // Add Header Row
+            // Add Header
             await window.gapi.client.sheets.spreadsheets.values.update({
                 spreadsheetId: foundId,
                 range: 'Sheet1!A1',
                 valueInputOption: 'USER_ENTERED',
-                resource: {
-                    values: [['ID', 'JSON_DATA', 'Updated_At']]
-                }
+                resource: { values: [['ID', 'JSON_DATA', 'Updated_At']] }
             });
         }
         setSpreadsheetId(foundId);
@@ -283,46 +285,43 @@ export default function App() {
 
         const rows = dataResponse.result.values;
         if (rows && rows.length > 0) {
-            // Parse JSON data from column B
             const parsedData = rows.map(row => {
                 try { return JSON.parse(row[1]); } catch(e) { return null; }
             }).filter(item => item !== null);
             setData(parsedData);
-            // Also sync to local storage for offline viewing
             localStorage.setItem('beetle_app_data', JSON.stringify(parsedData));
         }
 
     } catch (e) {
         console.error("Sync Error:", e);
-        alert("同步失敗: " + e.message);
+        handleApiError(e, "同步失敗");
     } finally {
         setIsLoading(false);
     }
   };
 
   const saveToCloud = async (newData) => {
-      // 本地先存
+      // Local save first
       localStorage.setItem('beetle_app_data', JSON.stringify(newData));
       setData(newData);
 
-      // 如果已登入，則同步到雲端
+      // Cloud save
       if (isSignedIn && spreadsheetId) {
           setIsLoading(true);
           try {
-            // Simple Strategy: Clear Sheet and Rewrite (For small dataset < 1000)
-            // Ideally we should use batchUpdate or append, but rewrite is safer for consistency in this demo
-            
             const rows = newData.map(item => [
                 item.id,
                 JSON.stringify(item),
                 new Date().toISOString()
             ]);
 
+            // Clear old data
             await window.gapi.client.sheets.spreadsheets.values.clear({
                 spreadsheetId: spreadsheetId,
                 range: 'Sheet1!A2:C'
             });
 
+            // Write new data
             if (rows.length > 0) {
                 await window.gapi.client.sheets.spreadsheets.values.update({
                     spreadsheetId: spreadsheetId,
@@ -333,11 +332,26 @@ export default function App() {
             }
           } catch (e) {
               console.error("Save Error:", e);
-              alert("雲端儲存失敗，但資料已保存於本地");
+              handleApiError(e, "雲端儲存失敗");
           } finally {
               setIsLoading(false);
           }
       }
+  };
+
+  const handleApiError = (e, prefix) => {
+      let msg = e.result?.error?.message || e.message || "未知錯誤";
+      
+      // Customize error messages for users
+      if (e.result?.error?.code === 403 || msg.includes("permission") || msg.includes("scope")) {
+          msg = "權限不足。請登出後重新登入，並勾選所有 Google Drive/Sheets 權限框框。";
+      } else if (msg.includes("API key not valid")) {
+          msg = "API 設定錯誤，請檢查 Client ID。";
+      }
+
+      const fullMsg = `${prefix}: ${msg}`;
+      setErrorMsg(fullMsg);
+      alert(fullMsg);
   };
 
   // --- Original App Logic ---
@@ -411,9 +425,6 @@ export default function App() {
   const handleImageUpload = (e, fieldName = 'image') => {
     const file = e.target.files[0];
     if (file) {
-      // In a real cloud app, we would upload to Drive here and get the URL
-      // For now, we keep using Base64 for the 'offline first' experience
-      // or implement a separate uploadToDrive function
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
@@ -422,7 +433,6 @@ export default function App() {
     }
   };
 
-  // --- Helper Functions for Form ---
   const addLarvaRecord = () => {
     setFormData(prev => ({
         ...prev,
@@ -465,7 +475,15 @@ export default function App() {
             <h1 className="text-2xl font-bold text-[#4A3B32]">
             {activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : activeTab === 'breeding' ? '產卵組' : '設定'}
             </h1>
-            {isSignedIn && <span className="text-xs text-green-600 flex items-center gap-1 mb-1"><Cloud size={12}/> 已連線</span>}
+            {isSignedIn ? (
+                <span className="text-xs text-green-600 flex items-center gap-1 mb-1 font-medium bg-green-50 px-2 py-1 rounded-full">
+                    <Cloud size={12}/> 已連線
+                </span>
+            ) : (
+                <span className="text-xs text-gray-400 flex items-center gap-1 mb-1 font-medium bg-gray-100 px-2 py-1 rounded-full">
+                    <Cloud size={12}/> 未連線
+                </span>
+            )}
         </div>
       )}
     </div>
@@ -509,6 +527,14 @@ export default function App() {
 
   const renderList = () => (
     <div className="px-4 pb-24">
+      {/* Show Error Banner if exists */}
+      {errorMsg && (
+          <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-xl mb-4 text-xs flex items-center gap-2">
+              <AlertTriangle size={16} />
+              <span>{errorMsg}</span>
+          </div>
+      )}
+
       {filteredData.length === 0 ? renderEmptyState() : (
         <div className="grid gap-3">
           {filteredData.map((item) => (
@@ -930,7 +956,6 @@ export default function App() {
   const renderQRCodeModal = () => {
     if (!showQR || !editingItem) return null;
     
-    // Create a deep link to Google Sheet row if possible, otherwise just display ID
     const qrData = JSON.stringify({
       id: editingItem.id,
       name: editingItem.name,
@@ -991,7 +1016,14 @@ export default function App() {
                         {spreadsheetId ? '已連接雲端試算表' : '僅使用本地儲存'}
                     </span>
                   </div>
-                  {isLoading && <Loader className="animate-spin text-[#8B5E3C]" size={18} />}
+                  <div className="flex items-center gap-2">
+                    {spreadsheetId && isSignedIn && (
+                        <Button variant="ghost" onClick={() => syncWithGoogleSheets()} className="!p-1" disabled={isLoading}>
+                             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
+                        </Button>
+                    )}
+                    {isLoading && <Loader className="animate-spin text-[#8B5E3C]" size={18} />}
+                  </div>
               </div>
 
               <div className="p-4 border-b border-[#F0EBE0] flex items-center justify-between">
@@ -1000,7 +1032,7 @@ export default function App() {
               </div>
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v1.2.0 (Cloud)</span>
+                  <span className="text-xs text-[#A09383]">v1.3.0 (Cloud+Debug)</span>
               </div>
           </div>
           
