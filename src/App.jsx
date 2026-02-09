@@ -26,7 +26,11 @@ import {
   Download,
   Upload,
   ArrowUpDown,
-  FileJson
+  FileJson,
+  Share2,
+  Copy,
+  Home,
+  FolderOpen
 } from 'lucide-react';
 
 // ==========================================
@@ -40,6 +44,7 @@ const DISCOVERY_DOCS = [
   'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'
 ];
 const SPREADSHEET_NAME = 'Beetle_Manager_DB';
+const APP_FOLDER_NAME = 'Beetle-Manager'; // 指定上傳的資料夾名稱
 
 // --- Helper: Convert Base64 to Blob for Upload ---
 const base64ToBlob = (base64Data) => {
@@ -52,6 +57,25 @@ const base64ToBlob = (base64Data) => {
     uInt8Array[i] = raw.charCodeAt(i);
   }
   return new Blob([uInt8Array], { type: contentType });
+};
+
+// --- Helper: UTF-8 Safe Base64 Encoding/Decoding for Sharing ---
+const encodeShareData = (data) => {
+  try {
+    return window.btoa(unescape(encodeURIComponent(JSON.stringify(data))));
+  } catch (e) {
+    console.error("Encoding failed", e);
+    return "";
+  }
+};
+
+const decodeShareData = (str) => {
+  try {
+    return JSON.parse(decodeURIComponent(escape(window.atob(str))));
+  } catch (e) {
+    console.error("Decoding failed", e);
+    return null;
+  }
 };
 
 // --- UI Components ---
@@ -103,17 +127,17 @@ const TextInput = ({ value, onChange, placeholder, suffix, readOnly, className =
   </div>
 );
 
-const SelectButton = ({ options, value, onChange }) => (
+const SelectButton = ({ options, value, onChange, readOnly }) => (
   <div className="flex gap-2 mt-1">
     {options.map((opt) => (
       <button
         key={opt.value}
-        onClick={() => onChange(opt.value)}
+        onClick={() => !readOnly && onChange(opt.value)}
         className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-all ${
           value === opt.value
             ? 'bg-[#E8DCC8] border-[#8B5E3C] text-[#5C4033]'
             : 'border-[#E5E7EB] text-gray-400 bg-white'
-        }`}
+        } ${readOnly ? 'cursor-default opacity-80' : ''}`}
       >
         {opt.label}
       </button>
@@ -156,7 +180,7 @@ const loadGoogleScript = (callback) => {
 export default function App() {
   // State
   const [activeTab, setActiveTab] = useState('adult');
-  const [view, setView] = useState('list');
+  const [view, setView] = useState('list'); // 'list', 'form', 'shared'
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('id'); // 'id', 'name', 'rating', 'date'
@@ -164,6 +188,13 @@ export default function App() {
   
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
+  
+  // Share Modal State
+  const [shareModalItem, setShareModalItem] = useState(null);
+  
+  // Shared View State (Visitor Mode)
+  const [sharedItem, setSharedItem] = useState(null);
+  
   const [isLoading, setIsLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState(''); 
   const [errorMsg, setErrorMsg] = useState('');
@@ -179,6 +210,7 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
   const [spreadsheetId, setSpreadsheetId] = useState(null);
   const [sheetName, setSheetName] = useState('Sheet1'); 
+  const [driveFolderId, setDriveFolderId] = useState(null); // New: Store the Beetle-Manager folder ID
 
   // Form State
   const [formData, setFormData] = useState({
@@ -212,15 +244,28 @@ export default function App() {
     id: ''
   });
 
-  // --- Google Integration Logic ---
+  // --- Initialization & Google Integration Logic ---
 
   useEffect(() => {
-    // Load local data first
+    // 1. Check for Share URL Param
+    const params = new URLSearchParams(window.location.search);
+    const shareData = params.get('share');
+    if (shareData) {
+      const decoded = decodeShareData(shareData);
+      if (decoded) {
+        setSharedItem(decoded);
+        setView('shared');
+        return; // Skip normal loading if viewing share
+      }
+    }
+
+    // 2. Load local data normally
     const savedData = localStorage.getItem('beetle_app_data');
     if (savedData) {
       setData(JSON.parse(savedData));
     }
 
+    // 3. Init Google Scripts
     try {
       loadGoogleScript(() => {
         if (window.gapi) {
@@ -294,17 +339,50 @@ export default function App() {
       setUserProfile(null);
       setData([]); 
       setSpreadsheetId(null);
+      setDriveFolderId(null);
       setErrorMsg('');
     }
   };
 
+  // --- Drive Folder Management ---
+  const ensureAppFolder = async () => {
+    try {
+        // Search for existing folder
+        const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${APP_FOLDER_NAME}' and trashed = false`;
+        const response = await window.gapi.client.drive.files.list({
+            q: q,
+            fields: 'files(id, name)',
+        });
+
+        if (response.result.files && response.result.files.length > 0) {
+            // Found existing folder
+            console.log("Found existing App folder:", response.result.files[0].id);
+            return response.result.files[0].id;
+        } else {
+            // Create new folder
+            const createResponse = await window.gapi.client.drive.files.create({
+                resource: {
+                    name: APP_FOLDER_NAME,
+                    mimeType: 'application/vnd.google-apps.folder'
+                },
+                fields: 'id'
+            });
+            console.log("Created new App folder:", createResponse.result.id);
+            return createResponse.result.id;
+        }
+    } catch (e) {
+        console.error("Error ensuring app folder:", e);
+        return null;
+    }
+  };
+
   // --- Upload Image to Drive ---
-  const uploadImageToDrive = async (base64Data, filename) => {
+  const uploadImageToDrive = async (base64Data, filename, folderId) => {
     const blob = base64ToBlob(base64Data);
     const metadata = {
       name: filename,
       mimeType: blob.type,
-      // parents: ['root'] // Optional: specify folder ID
+      parents: folderId ? [folderId] : [] // Specify the parent folder
     };
 
     const accessToken = window.gapi.client.getToken().access_token;
@@ -336,6 +414,11 @@ export default function App() {
             throw new Error("Google API Client not ready");
         }
 
+        // 1. Ensure Folder Exists
+        const folderId = await ensureAppFolder();
+        setDriveFolderId(folderId);
+
+        // 2. Handle Spreadsheet
         let foundId = null;
         let currentSheetName = 'Sheet1';
 
@@ -415,7 +498,12 @@ export default function App() {
                       if (item[field] && item[field].startsWith('data:image')) {
                           setStatusMsg(`正在上傳照片...`);
                           try {
-                              const driveLink = await uploadImageToDrive(item[field], `beetle_${field}_${item.id}_${Date.now()}.jpg`);
+                              // Pass driveFolderId here
+                              const driveLink = await uploadImageToDrive(
+                                  item[field], 
+                                  `beetle_${field}_${item.id}_${Date.now()}.jpg`, 
+                                  driveFolderId
+                              );
                               item[field] = driveLink;
                               modified = true;
                           } catch (err) {
@@ -432,7 +520,12 @@ export default function App() {
                          if (img.startsWith('data:image')) {
                              setStatusMsg(`正在上傳相簿 (${i+1}/${item.images.length})...`);
                              try {
-                                 const driveLink = await uploadImageToDrive(img, `beetle_album_${item.id}_${i}_${Date.now()}.jpg`);
+                                 // Pass driveFolderId here
+                                 const driveLink = await uploadImageToDrive(
+                                     img, 
+                                     `beetle_album_${item.id}_${i}_${Date.now()}.jpg`,
+                                     driveFolderId
+                                 );
                                  newImages.push(driveLink);
                                  modified = true;
                              } catch (err) {
@@ -817,6 +910,229 @@ export default function App() {
       );
   };
 
+  // --- Share Logic ---
+
+  const handleShareClick = (e, item) => {
+    e.stopPropagation();
+    setShareModalItem(item);
+  };
+
+  const handleCopyLink = (url) => {
+    navigator.clipboard.writeText(url).then(() => {
+      alert("連結已複製到剪貼簿！");
+    });
+  };
+  
+  const renderQRCodeModal = () => {
+    if (!showQR || !editingItem) return null;
+    
+    const qrData = JSON.stringify({
+      id: editingItem.id,
+      name: editingItem.name,
+      sheetId: spreadsheetId || 'offline',
+    });
+
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&color=4A3B32`;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm flex flex-col items-center animate-in fade-in zoom-in duration-200">
+          <h3 className="font-bold text-lg mb-2 text-[#4A3B32]">資料 QR Code</h3>
+          <p className="text-xs text-gray-500 mb-6 text-center">掃描此碼以快速查詢此甲蟲的完整履歷。</p>
+          
+          <div className="bg-white p-2 rounded-xl shadow-inner border border-gray-100 mb-6">
+             <img src={qrImageUrl} alt="QR Code" className="w-48 h-48" />
+          </div>
+
+          <div className="text-center mb-6">
+             <p className="font-bold text-[#8B5E3C]">{editingItem.name}</p>
+             <p className="text-sm text-gray-400">{editingItem.id}</p>
+          </div>
+
+          <Button variant="primary" onClick={() => setShowQR(false)} className="w-full">
+            關閉
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderShareModal = () => {
+    if (!shareModalItem) return null;
+
+    const shareData = encodeShareData(shareModalItem);
+    const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareData}`;
+    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}&color=4A3B32`;
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-sm flex flex-col items-center animate-in fade-in zoom-in duration-200">
+          <div className="flex justify-between w-full items-center mb-4">
+            <h3 className="font-bold text-lg text-[#4A3B32] flex items-center gap-2">
+                <Share2 size={18} /> 分享資料
+            </h3>
+            <button onClick={() => setShareModalItem(null)} className="text-gray-400">
+                <X size={20} />
+            </button>
+          </div>
+          
+          <p className="text-xs text-gray-500 mb-4 text-center">掃描此碼或複製連結，即可讓他人檢視此資料。</p>
+          
+          <div className="bg-white p-2 rounded-xl shadow-inner border border-gray-100 mb-4">
+             <img src={qrImageUrl} alt="QR Code" className="w-48 h-48" />
+          </div>
+
+          <div className="w-full bg-[#F5F1E8] p-3 rounded-lg flex items-center gap-2 mb-4">
+             <div className="flex-1 text-xs text-[#5C4033] truncate font-mono bg-transparent border-none focus:outline-none">
+                 {shareUrl}
+             </div>
+             <button onClick={() => handleCopyLink(shareUrl)} className="text-[#8B5E3C] hover:text-[#5C4033]">
+                 <Copy size={16} />
+             </button>
+          </div>
+
+          <div className="text-center mb-2">
+             <p className="font-bold text-[#8B5E3C]">{shareModalItem.name}</p>
+             <p className="text-xs text-gray-400">{shareModalItem.customId}</p>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // --- Shared (Visitor) View ---
+  const renderSharedView = () => {
+      if (!sharedItem) return null;
+      
+      const item = sharedItem;
+      const displayImage = item.image || (item.images && item.images.length > 0 ? item.images[0] : null);
+
+      return (
+          <div className="min-h-screen bg-[#FDFBF7] p-4 pb-20">
+              <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-4 text-xs flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle size={16} />
+                    <span>您正在檢視分享的資料 (唯讀模式)</span>
+                  </div>
+                  <button 
+                    onClick={() => {
+                        // Clear URL params and go home
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        setSharedItem(null);
+                        setView('list');
+                        window.location.reload(); // Hard reload to clear clean
+                    }}
+                    className="bg-white px-3 py-1 rounded-full shadow-sm text-yellow-800 font-bold border border-yellow-100 flex items-center gap-1"
+                  >
+                      <Home size={12} /> 返回首頁
+                  </button>
+              </div>
+
+              <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden">
+                  <div className="relative h-64 bg-[#F5F1E8]">
+                      {displayImage ? (
+                          <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                          <div className="w-full h-full flex items-center justify-center text-[#D6CDBF]">
+                              <Bug size={64} />
+                          </div>
+                      )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4 pt-12">
+                          <h1 className="text-2xl font-bold text-white">{item.name}</h1>
+                          <p className="text-white/80 text-sm font-mono">{item.customId}</p>
+                      </div>
+                  </div>
+
+                  <div className="p-5 space-y-6">
+                      <div className="grid grid-cols-2 gap-4">
+                           <div className="bg-[#FDFBF7] p-3 rounded-lg">
+                               <label className="text-xs text-[#A09383] block mb-1">產地</label>
+                               <div className="text-[#4A3B32] font-medium">{item.origin || '-'}</div>
+                           </div>
+                           <div className="bg-[#FDFBF7] p-3 rounded-lg">
+                               <label className="text-xs text-[#A09383] block mb-1">學名</label>
+                               <div className="text-[#4A3B32] font-medium italic">{item.scientificName || '-'}</div>
+                           </div>
+                      </div>
+
+                      <div className="flex gap-4">
+                          <div className="flex-1">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">基本數據</label>
+                              <ul className="space-y-2 text-sm text-[#4A3B32]">
+                                  <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
+                                      <span>性別</span>
+                                      <span>{item.gender === 'male' ? '♂ 公' : item.gender === 'female' ? '♀ 母' : '?'}</span>
+                                  </li>
+                                  <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
+                                      <span>{item.type === 'larva' ? '體重' : '體長'}</span>
+                                      <span>{item.type === 'larva' ? (item.weight ? `${item.weight}g` : '-') : (item.size ? `${item.size}mm` : '-')}</span>
+                                  </li>
+                                  <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
+                                      <span>累代</span>
+                                      <span>{item.generation || '-'}</span>
+                                  </li>
+                                  <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
+                                      <span>血統</span>
+                                      <span>{item.bloodline || '-'}</span>
+                                  </li>
+                              </ul>
+                          </div>
+                      </div>
+
+                      {item.type === 'adult' && (
+                        <div>
+                            <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">生命歷程</label>
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div className="bg-[#FDFBF7] p-2 rounded">
+                                    <div className="text-[10px] text-[#A09383]">羽化</div>
+                                    <div className="text-xs font-bold text-[#4A3B32]">{item.date || '-'}</div>
+                                </div>
+                                <div className="bg-[#FDFBF7] p-2 rounded">
+                                    <div className="text-[10px] text-[#A09383]">進食</div>
+                                    <div className="text-xs font-bold text-[#4A3B32]">{item.startFeedingDate || '-'}</div>
+                                </div>
+                                <div className="bg-[#FDFBF7] p-2 rounded">
+                                    <div className="text-[10px] text-[#A09383]">死亡</div>
+                                    <div className="text-xs font-bold text-[#4A3B32]">{item.deathDate || '-'}</div>
+                                </div>
+                            </div>
+                        </div>
+                      )}
+
+                      {item.memo && (
+                          <div className="bg-[#F5F1E8] p-4 rounded-xl">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-2 block flex items-center gap-1">
+                                  <Database size={12}/> 飼育筆記
+                              </label>
+                              <p className="text-sm text-[#5C4033] whitespace-pre-wrap">{item.memo}</p>
+                          </div>
+                      )}
+
+                      {/* Image Gallery */}
+                      {item.images && item.images.length > 0 && (
+                          <div>
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">照片記錄</label>
+                              <div className="grid grid-cols-3 gap-2">
+                                  {item.images.map((img, idx) => (
+                                      <img 
+                                        key={idx} 
+                                        src={img} 
+                                        alt={`Gallery ${idx}`}
+                                        className="aspect-square object-cover rounded-lg border border-[#E8E1D5]"
+                                      />
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+                  </div>
+              </div>
+              <div className="text-center mt-8 text-[#D6CDBF] text-xs">
+                  Beetle Manager App
+              </div>
+          </div>
+      );
+  };
+
   const renderHeader = () => (
     <div className="bg-[#FDFBF7] p-4 sticky top-0 z-10 shadow-sm">
       <div className="flex items-center gap-3">
@@ -842,9 +1158,6 @@ export default function App() {
         {view === 'list' && activeTab !== 'settings' && (
             <button 
                 onClick={() => {
-                    // Cycle sort: id -> name -> rating -> date -> id...
-                    // Or click to change field, long press/secondary click to change order? 
-                    // Let's implement simple cycle for field, and separate toggle for order
                     const modes = ['id', 'name', 'rating', 'date'];
                     const nextMode = modes[(modes.indexOf(sortBy) + 1) % modes.length];
                     setSortBy(nextMode);
@@ -950,7 +1263,7 @@ export default function App() {
                 <div 
                 key={item.id} 
                 onClick={() => handleEditItem(item)}
-                className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden"
+                className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden group"
                 >
                 <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${showSpecimen ? 'grayscale opacity-80' : ''}`}>
                     {displayImage ? (
@@ -994,6 +1307,16 @@ export default function App() {
                     </span>
                     </div>
                 </div>
+
+                {/* Share Button (Absolute Positioned) */}
+                <button 
+                  onClick={(e) => handleShareClick(e, item)}
+                  className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#FDFBF7] text-[#8B5E3C] flex items-center justify-center shadow-sm border border-[#F0EBE0] opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                  title="分享"
+                >
+                    <Share2 size={14} />
+                </button>
+
                 </div>
              );
           })}
@@ -1009,457 +1332,6 @@ export default function App() {
       </button>
     </div>
   );
-
-  const renderForm = () => (
-    <div className="px-5 pb-24 bg-[#FDFBF7] min-h-screen">
-      <div className="flex justify-between items-center py-4 mb-4">
-        <h2 className="text-xl font-bold text-[#4A3B32]">
-          {editingItem ? '編輯資料' : `新增${activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產卵組'}`}
-        </h2>
-        <div className="flex gap-2">
-          {editingItem && (
-            <>
-              <Button variant="ghost" onClick={() => setShowQR(true)}>
-                <QrCode size={20} />
-              </Button>
-              <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)}>
-                <Trash2 size={20} />
-              </Button>
-            </>
-          )}
-          <Button variant="primary" onClick={handleSave} className="!px-6" disabled={isLoading}>
-             {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />} 
-             {isLoading ? '處理中' : '儲存'}
-          </Button>
-        </div>
-      </div>
-
-      {/* Status Bar for Uploads */}
-      {statusMsg && (
-          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 animate-pulse">
-              <UploadCloud size={16} />
-              <span>{statusMsg}</span>
-          </div>
-      )}
-
-      {/* Main Info Section */}
-      <div className="space-y-6">
-        <InputGroup label="基本資訊">
-          <div className="mb-4 bg-[#F5F1E8] rounded-lg p-3">
-             <label className="text-[10px] text-[#A09383] block mb-1">編號 (自動產生)</label>
-             <div className="font-mono text-[#4A3B32] font-bold text-lg">{formData.customId}</div>
-          </div>
-
-          <div className="mb-4">
-             <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">喜好程度</label>
-             <StarRating rating={formData.rating} onChange={(r) => setFormData({...formData, rating: r})} />
-          </div>
-
-          <TextInput 
-            value={formData.name} 
-            onChange={v => setFormData({...formData, name: v})} 
-            placeholder="種類名稱 (如: 長戟大兜蟲)" 
-          />
-          <TextInput 
-            value={formData.scientificName} 
-            onChange={v => setFormData({...formData, scientificName: v})} 
-            placeholder="學名 (如: Dynastes hercules)" 
-            className="text-sm italic"
-          />
-
-          <TextInput 
-            value={formData.origin} 
-            onChange={v => setFormData({...formData, origin: v})} 
-            placeholder="產地 (如: 瓜德羅普島)" 
-          />
-           <TextInput 
-            value={formData.bloodline} 
-            onChange={v => setFormData({...formData, bloodline: v})} 
-            placeholder="血統 (如: C68, HiroKA)" 
-          />
-        </InputGroup>
-
-        {formData.type !== 'breeding' && (
-          <InputGroup label="性別">
-            <SelectButton 
-              options={[
-                { label: '? 不明', value: 'unknown' },
-                { label: '♂ 公', value: 'male' },
-                { label: '♀ 母', value: 'female' },
-              ]}
-              value={formData.gender}
-              onChange={v => setFormData({...formData, gender: v})}
-            />
-          </InputGroup>
-        )}
-
-        <div className="flex gap-4">
-            {formData.type === 'adult' && (
-              <div className="flex-1">
-                 <InputGroup label="體長">
-                    <TextInput 
-                        value={formData.size} 
-                        onChange={v => setFormData({...formData, size: v})} 
-                        placeholder="0.0" 
-                        suffix="mm"
-                    />
-                 </InputGroup>
-              </div>
-            )}
-             {formData.type === 'larva' && (
-              <div className="flex-1">
-                 <InputGroup label="目前體重">
-                    <TextInput 
-                        value={formData.weight} 
-                        onChange={v => setFormData({...formData, weight: v})} 
-                        placeholder="0.0" 
-                        suffix="g"
-                    />
-                 </InputGroup>
-              </div>
-            )}
-        </div>
-
-        <InputGroup label={formData.type === 'adult' ? "羽化日" : formData.type === 'larva' ? "孵化日" : "建立日期"}>
-          <input
-             type="date"
-             value={formData.date}
-             onChange={e => setFormData({...formData, date: e.target.value})}
-             className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium"
-          />
-        </InputGroup>
-
-        <InputGroup label="照片記錄 (可多張)">
-          <div className="grid grid-cols-3 gap-2 mb-2">
-             {formData.images && formData.images.map((img, index) => (
-                 <div key={index} className="aspect-square rounded-lg overflow-hidden relative group bg-white border border-[#E8E1D5]">
-                     <img 
-                        src={img} 
-                        alt={`Record ${index}`} 
-                        className="w-full h-full object-cover cursor-pointer hover:opacity-90"
-                        onClick={() => setViewImage(img)}
-                     />
-                     
-                     {/* Heart Button for Cover Image */}
-                     <button 
-                        onClick={(e) => { e.stopPropagation(); setCoverImage(img); }}
-                        className={`absolute top-1 right-1 p-1 rounded-full shadow-sm transition-all ${formData.image === img ? 'bg-white text-red-500 opacity-100' : 'bg-black/30 text-white opacity-0 group-hover:opacity-100 hover:bg-white hover:text-red-500'}`}
-                     >
-                         <Heart size={14} fill={formData.image === img ? "currentColor" : "none"} />
-                     </button>
-
-                     <button 
-                        onClick={(e) => { e.stopPropagation(); removeImage(index); }}
-                        className="absolute bottom-1 right-1 bg-white/80 p-1 rounded-full text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
-                     >
-                         <X size={14} />
-                     </button>
-                 </div>
-             ))}
-             <label className="aspect-square rounded-lg border-2 border-dashed border-[#D6CDBF] flex flex-col items-center justify-center cursor-pointer hover:bg-[#F5F1E8] transition-colors">
-                 <Camera size={24} className="text-[#A09383] mb-1" />
-                 <span className="text-[10px] text-[#A09383]">新增</span>
-                 <input 
-                    type="file" 
-                    accept="image/*" 
-                    multiple 
-                    className="hidden" 
-                    onChange={handleMultiImageUpload} 
-                 />
-             </label>
-          </div>
-          <p className="text-[10px] text-[#A09383] text-center mt-1">點擊愛心可設為封面</p>
-        </InputGroup>
-
-        <InputGroup label="累代資訊">
-          <div className="grid grid-cols-2 gap-4">
-             <TextInput 
-                value={formData.parentMale} 
-                onChange={v => setFormData({...formData, parentMale: v})} 
-                placeholder="種親 ♂" 
-                suffix="mm"
-            />
-             <TextInput 
-                value={formData.parentFemale} 
-                onChange={v => setFormData({...formData, parentFemale: v})} 
-                placeholder="種親 ♀" 
-                suffix="mm"
-            />
-          </div>
-          <div className="mt-4">
-            <TextInput 
-                value={formData.generation} 
-                onChange={v => setFormData({...formData, generation: v})} 
-                placeholder="累代 (如: CBF1)" 
-            />
-          </div>
-        </InputGroup>
-
-        <InputGroup label="備註">
-          <textarea 
-             className="w-full bg-[#F5F1E8] rounded-lg p-3 text-sm focus:outline-none min-h-[100px]"
-             placeholder="記錄飼育細節..."
-             value={formData.memo}
-             onChange={e => setFormData({...formData, memo: e.target.value})}
-          />
-        </InputGroup>
-
-        {formData.type === 'breeding' && (
-          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
-            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
-              <Calendar size={14} /> 產卵管理
-            </h3>
-            
-            <div className="space-y-4">
-               <InputGroup label="預計孵化日">
-                 <input
-                    type="date"
-                    value={formData.expectedHatchDate}
-                    onChange={e => setFormData({...formData, expectedHatchDate: e.target.value})}
-                    className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium"
-                 />
-               </InputGroup>
-
-               <div className="flex items-center justify-between bg-[#FDFBF7] p-3 rounded-lg border border-[#F0EBE0]">
-                  <div className="flex items-center gap-2">
-                     <div className={`p-2 rounded-full ${formData.enableEmailNotify ? 'bg-[#F4D06F] text-[#5C4033]' : 'bg-[#E8E1D5] text-[#A09383]'}`}>
-                        <Bell size={18} />
-                     </div>
-                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-[#5C4033]">電子郵件通知</span>
-                        <span className="text-[10px] text-[#A09383]">將在日期接近時發送提醒</span>
-                     </div>
-                  </div>
-                  <button 
-                     onClick={() => setFormData({...formData, enableEmailNotify: !formData.enableEmailNotify})}
-                     className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${formData.enableEmailNotify ? 'bg-[#8B5E3C]' : 'bg-[#D6CDBF]'}`}
-                  >
-                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${formData.enableEmailNotify ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </button>
-               </div>
-            </div>
-          </div>
-        )}
-
-        {formData.type === 'larva' && (
-          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
-            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
-              <Leaf size={14} /> 成長記錄
-            </h3>
-            
-            <div className="space-y-2">
-                {/* Header */}
-                <div className="flex text-xs text-[#A09383] px-1">
-                    <div className="flex-1">日期</div>
-                    <div className="flex-1 text-center">幼蟲期</div>
-                    <div className="flex-1 text-right">重量 (g)</div>
-                    <div className="w-6"></div>
-                </div>
-
-                {/* Rows */}
-                {formData.larvaRecords && formData.larvaRecords.map((record, index) => (
-                    <div key={index} className="flex items-center gap-2 border-b border-[#F0EBE0] pb-2 last:border-0">
-                        <input 
-                            type="date" 
-                            value={record.date}
-                            onChange={(e) => updateLarvaRecord(index, 'date', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0"
-                        />
-                        <select
-                            value={record.stage}
-                            onChange={(e) => updateLarvaRecord(index, 'stage', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center"
-                        >
-                            <option value="L1">L1</option>
-                            <option value="L2">L2</option>
-                            <option value="L3">L3</option>
-                            <option value="化蛹">化蛹</option>
-                            <option value="羽化">羽化</option>
-                        </select>
-                        <input 
-                            type="number" 
-                            placeholder="0.0"
-                            value={record.weight}
-                            onChange={(e) => updateLarvaRecord(index, 'weight', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-right min-w-0"
-                        />
-                        <button onClick={() => removeLarvaRecord(index)} className="w-6 text-red-400">
-                            <X size={14} />
-                        </button>
-                    </div>
-                ))}
-
-                <button 
-                    onClick={addLarvaRecord}
-                    className="w-full py-2 border border-dashed border-[#D6CDBF] text-[#8B5E3C] text-xs rounded-lg mt-2 hover:bg-[#FDFBF7]"
-                >
-                    + 新增記錄
-                </button>
-
-                {/* Important Photos */}
-                <div className="pt-4 border-t border-[#F0EBE0] mt-4">
-                    <h4 className="font-bold text-[#8B5E3C] text-xs mb-3">重要階段記錄照</h4>
-                    <div className="flex gap-3">
-                        <div className="flex-1">
-                            <label className="text-xs text-[#5C4033] mb-1 block">化蛹照</label>
-                            <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
-                                {formData.pupationImage ? (
-                                    <>
-                                        <img src={formData.pupationImage} alt="Pupation" 
-                                            className="w-full h-full object-cover rounded-lg cursor-pointer" 
-                                            onClick={() => setViewImage(formData.pupationImage)}
-                                        />
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, pupationImage: null}); }}
-                                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <label className="flex flex-col items-center cursor-pointer text-[#A09383] w-full h-full justify-center">
-                                        <Camera size={20} className="mb-1" />
-                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'pupationImage')} />
-                                    </label>
-                                )}
-                            </div>
-                        </div>
-                        <div className="flex-1">
-                            <label className="text-xs text-[#5C4033] mb-1 block">羽化照</label>
-                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
-                                {formData.emergenceImage ? (
-                                    <>
-                                        <img src={formData.emergenceImage} alt="Emergence" 
-                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
-                                            onClick={() => setViewImage(formData.emergenceImage)}
-                                        />
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, emergenceImage: null}); }}
-                                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
-                                        >
-                                            <X size={14} />
-                                        </button>
-                                    </>
-                                ) : (
-                                    <label className="flex flex-col items-center cursor-pointer text-[#A09383] w-full h-full justify-center">
-                                        <Camera size={20} className="mb-1" />
-                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'emergenceImage')} />
-                                    </label>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-          </div>
-        )}
-
-        {formData.type === 'adult' && (
-          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
-            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
-              <Calendar size={14} /> 生命歷程 (成蟲限定)
-            </h3>
-            
-            <div className="grid grid-cols-1 gap-4">
-              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
-                 <label className="text-sm text-[#5C4033]">取得日</label>
-                 <input
-                    type="date"
-                    value={formData.acquisitionDate}
-                    onChange={e => setFormData({...formData, acquisitionDate: e.target.value})}
-                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
-                 />
-              </div>
-              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
-                 <label className="text-sm text-[#5C4033]">開吃日</label>
-                 <input
-                    type="date"
-                    value={formData.startFeedingDate}
-                    onChange={e => setFormData({...formData, startFeedingDate: e.target.value})}
-                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
-                 />
-              </div>
-              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
-                 <label className="text-sm text-[#5C4033]">死亡日</label>
-                 <input
-                    type="date"
-                    value={formData.deathDate}
-                    onChange={e => setFormData({...formData, deathDate: e.target.value})}
-                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
-                 />
-              </div>
-            </div>
-
-            <InputGroup label="標本照">
-                <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-4 flex flex-col items-center justify-center bg-[#FDFBF7] min-h-[120px]">
-                    {formData.specimenImage ? (
-                    <div className="relative w-full h-32">
-                        <img src={formData.specimenImage} alt="Specimen" 
-                            className="w-full h-full object-contain rounded-lg opacity-80 cursor-pointer" 
-                            onClick={() => setViewImage(formData.specimenImage)}
-                        />
-                        <button 
-                        onClick={(e) => { e.stopPropagation(); setFormData({...formData, specimenImage: null}); }}
-                        className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                        >
-                        <X size={14} />
-                        </button>
-                    </div>
-                    ) : (
-                    <label className="flex flex-col items-center cursor-pointer text-[#A09383]">
-                        <Camera size={24} className="mb-2" />
-                        <span className="text-xs">上傳標本記錄</span>
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'specimenImage')} />
-                    </label>
-                    )}
-                </div>
-            </InputGroup>
-          </div>
-        )}
-
-        <div className="bg-[#E8E1D5] bg-opacity-30 p-4 rounded-lg flex items-center gap-2 text-xs text-[#8B5E3C]">
-           <Database size={14} />
-           <span>資料將自動保存於 {isSignedIn ? 'Google 試算表' : '本地儲存 (未連線)'}</span>
-        </div>
-      </div>
-
-      {renderImageViewer()}
-    </div>
-  );
-
-  const renderQRCodeModal = () => {
-    if (!showQR || !editingItem) return null;
-    
-    const qrData = JSON.stringify({
-      id: editingItem.id,
-      name: editingItem.name,
-      sheetId: spreadsheetId || 'offline',
-    });
-
-    const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrData)}&color=4A3B32`;
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl p-6 w-full max-w-sm flex flex-col items-center animate-in fade-in zoom-in duration-200">
-          <h3 className="font-bold text-lg mb-2 text-[#4A3B32]">資料 QR Code</h3>
-          <p className="text-xs text-gray-500 mb-6 text-center">掃描此碼以快速查詢此甲蟲的完整履歷。</p>
-          
-          <div className="bg-white p-2 rounded-xl shadow-inner border border-gray-100 mb-6">
-             <img src={qrImageUrl} alt="QR Code" className="w-48 h-48" />
-          </div>
-
-          <div className="text-center mb-6">
-             <p className="font-bold text-[#8B5E3C] text-lg">{editingItem.name}</p>
-             <p className="text-sm text-gray-400">{editingItem.id}</p>
-          </div>
-
-          <Button variant="primary" onClick={() => setShowQR(false)} className="w-full">
-            關閉
-          </Button>
-        </div>
-      </div>
-    );
-  };
 
   const renderSettings = () => (
       <div className="px-4 pb-24">
@@ -1529,30 +1401,38 @@ export default function App() {
 
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v1.8.0 (Tools+Sort)</span>
+                  <span className="text-xs text-[#A09383]">v2.0.2 (Fix Missing Func)</span>
               </div>
           </div>
           
           <div className="mt-8 p-4 bg-yellow-50 rounded-lg text-xs text-[#8B5E3C] border border-yellow-100">
-            <h4 className="font-bold mb-2">部署說明</h4>
-            <p>1. 請確保程式碼上方 <code>CLIENT_ID</code> 已填入。</p>
-            <p className="mt-1">2. 請將此 App 部署至 Vercel，並將 Vercel 的網址加入 Google Cloud Console 的「已授權 JavaScript 來源」。</p>
+            <h4 className="font-bold mb-2 flex items-center gap-1"><FolderOpen size={14}/> 圖片權限設定說明</h4>
+            <p>1. 系統已自動在您的 Google Drive 建立 <b>{APP_FOLDER_NAME}</b> 資料夾。</p>
+            <p className="mt-1">2. 為了讓分享連結能正常顯示圖片，請前往 Google Drive 找到該資料夾。</p>
+            <p className="mt-1">3. 將資料夾權限設定為 <b>「知道連結的任何人」</b> &rarr; <b>「檢視者」</b>。</p>
           </div>
       </div>
   );
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans text-[#4A3B32]">
-      {renderHeader()}
-      
-      <main className="pt-2">
-        {view === 'list' && activeTab !== 'settings' && renderList()}
-        {view === 'list' && activeTab === 'settings' && renderSettings()}
-        {view === 'form' && renderForm()}
-      </main>
+      {view === 'shared' ? (
+          renderSharedView()
+      ) : (
+          <>
+            {renderHeader()}
+            
+            <main className="pt-2">
+                {view === 'list' && activeTab !== 'settings' && renderList()}
+                {view === 'list' && activeTab === 'settings' && renderSettings()}
+                {view === 'form' && renderForm()}
+            </main>
 
-      {renderBottomNav()}
-      {renderQRCodeModal()}
+            {renderBottomNav()}
+            {renderQRCodeModal()}
+            {renderShareModal()}
+          </>
+      )}
     </div>
   );
 }
