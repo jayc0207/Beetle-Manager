@@ -30,7 +30,8 @@ import {
   Share2,
   Copy,
   Home,
-  FolderOpen
+  FolderOpen,
+  Link as LinkIcon
 } from 'lucide-react';
 
 // ==========================================
@@ -76,6 +77,36 @@ const decodeShareData = (str) => {
     console.error("Decoding failed", e);
     return null;
   }
+};
+
+// --- Helper: Fetch Public Sheet Data (GViz API) ---
+const fetchPublicSheetData = async (sheetId, targetItemId) => {
+    try {
+        // 使用 Google Visualization API 讀取公開試算表 (不需要 OAuth)
+        const url = `https://docs.google.com/spreadsheets/d/${sheetId}/gviz/tq?tqx=out:json`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Network response was not ok');
+        
+        const text = await response.text();
+        
+        // GViz 回傳的 JSON 包在 /*O_o*/ google.visualization.Query.setResponse(...); 中，需擷取
+        const jsonText = text.substring(47, text.length - 2);
+        const json = JSON.parse(jsonText);
+        
+        // 解析資料列: 假設 Column B (index 1) 存放 JSON 字串
+        // table.rows[i].c[1].v
+        const items = json.table.rows.map(row => {
+            try {
+                const cell = row.c && row.c[1]; // Column B
+                return cell ? JSON.parse(cell.v) : null;
+            } catch(e) { return null; }
+        }).filter(i => i !== null);
+        
+        return items.find(i => i.id === targetItemId);
+    } catch (e) {
+        console.error("Fetch sheet error", e);
+        return null;
+    }
 };
 
 // --- UI Components ---
@@ -194,6 +225,8 @@ export default function App() {
   
   // Shared View State (Visitor Mode)
   const [sharedItem, setSharedItem] = useState(null);
+  const [isVisitorLoading, setIsVisitorLoading] = useState(false);
+  const [visitorError, setVisitorError] = useState('');
   
   const [isLoading, setIsLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState(''); 
@@ -247,15 +280,42 @@ export default function App() {
   // --- Initialization & Google Integration Logic ---
 
   useEffect(() => {
-    // 1. Check for Share URL Param
+    // 1. Check for Share Params
     const params = new URLSearchParams(window.location.search);
     const shareData = params.get('share');
+    const sharedSheetId = params.get('s');
+    const sharedItemId = params.get('id');
+
+    // Case A: Cloud Short Link
+    if (sharedSheetId && sharedItemId) {
+        setIsVisitorLoading(true);
+        setVisitorError('');
+        setView('shared'); // Switch immediately
+        
+        fetchPublicSheetData(sharedSheetId, sharedItemId)
+            .then(item => {
+                if (item) {
+                    setSharedItem(item);
+                } else {
+                    setVisitorError('找不到資料。可能該資料已被刪除，或試算表未設為「公開檢視」。');
+                }
+            })
+            .catch(err => {
+                setVisitorError('讀取失敗。請確認網路連線。');
+            })
+            .finally(() => {
+                setIsVisitorLoading(false);
+            });
+        return; // Skip normal loading
+    }
+    
+    // Case B: Data in URL (Legacy/Offline)
     if (shareData) {
       const decoded = decodeShareData(shareData);
       if (decoded) {
         setSharedItem(decoded);
         setView('shared');
-        return; // Skip normal loading if viewing share
+        return; 
       }
     }
 
@@ -920,7 +980,36 @@ export default function App() {
 
   const handleShareClick = (e, item) => {
     e.stopPropagation();
-    setShareModalItem(item);
+    
+    let url = '';
+    let isCloud = false;
+
+    if (spreadsheetId) {
+        // Cloud Mode (Short URL)
+        // 格式: ?s={SpreadsheetID}&id={ItemID}
+        url = `${window.location.origin}${window.location.pathname}?s=${spreadsheetId}&id=${item.id}`;
+        isCloud = true;
+    } else {
+        // Local Mode (Legacy Base64)
+        // 修正: 移除 Base64 大圖，避免網址過長
+        const safeItem = { ...item };
+        
+        // 1. 清理相簿中的 Base64
+        if (safeItem.images) {
+            safeItem.images = safeItem.images.filter(img => !img.startsWith('data:image'));
+        }
+        
+        // 2. 清理單張欄位的 Base64
+        if (safeItem.image && safeItem.image.startsWith('data:image')) safeItem.image = null;
+        if (safeItem.specimenImage && safeItem.specimenImage.startsWith('data:image')) safeItem.specimenImage = null;
+        if (safeItem.pupationImage && safeItem.pupationImage.startsWith('data:image')) safeItem.pupationImage = null;
+        if (safeItem.emergenceImage && safeItem.emergenceImage.startsWith('data:image')) safeItem.emergenceImage = null;
+
+        const shareData = encodeShareData(safeItem);
+        url = `${window.location.origin}${window.location.pathname}?share=${shareData}`;
+    }
+    
+    setShareModalItem({ ...item, shareUrl: url, isCloud });
   };
 
   const handleCopyLink = (url) => {
@@ -966,8 +1055,7 @@ export default function App() {
   const renderShareModal = () => {
     if (!shareModalItem) return null;
 
-    const shareData = encodeShareData(shareModalItem);
-    const shareUrl = `${window.location.origin}${window.location.pathname}?share=${shareData}`;
+    const { shareUrl, isCloud } = shareModalItem;
     const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(shareUrl)}&color=4A3B32`;
 
     return (
@@ -982,7 +1070,17 @@ export default function App() {
             </button>
           </div>
           
-          <p className="text-xs text-gray-500 mb-4 text-center">掃描此碼或複製連結，即可讓他人檢視此資料。</p>
+          {isCloud ? (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-xs text-green-800 mb-4">
+                  <p className="font-bold mb-1 flex items-center gap-1"><Cloud size={14}/> 使用雲端短網址</p>
+                  <p>連結已縮短！<br/>請確認 Google 試算表權限已設為「知道連結的任何人-檢視者」，否則訪客將無法讀取。</p>
+              </div>
+          ) : (
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 text-xs text-orange-800 mb-4">
+                   <p className="font-bold mb-1 flex items-center gap-1"><AlertTriangle size={14}/> 使用離線長網址</p>
+                   <p>您未連線至雲端。網址將包含所有資料 (可能很長)。<br/>為確保連結有效，<b>未同步到 Drive 的大圖片已自動移除</b>。</p>
+              </div>
+          )}
           
           <div className="bg-white p-2 rounded-xl shadow-inner border border-gray-100 mb-4">
              <img src={qrImageUrl} alt="QR Code" className="w-48 h-48" />
@@ -1008,6 +1106,41 @@ export default function App() {
 
   // --- Shared (Visitor) View ---
   const renderSharedView = () => {
+      // Loading State
+      if (isVisitorLoading) {
+          return (
+              <div className="min-h-screen bg-[#FDFBF7] flex flex-col items-center justify-center p-4">
+                  <Loader className="animate-spin text-[#8B5E3C] mb-4" size={48} />
+                  <p className="text-[#5C4033] font-bold">正在讀取雲端資料...</p>
+                  <p className="text-xs text-[#A09383] mt-2">請稍候</p>
+              </div>
+          );
+      }
+
+      // Error State
+      if (visitorError) {
+          return (
+              <div className="min-h-screen bg-[#FDFBF7] flex flex-col items-center justify-center p-4 text-center">
+                  <div className="bg-red-100 p-4 rounded-full mb-4 text-red-500">
+                      <AlertTriangle size={48} />
+                  </div>
+                  <h3 className="text-xl font-bold text-[#4A3B32] mb-2">無法讀取資料</h3>
+                  <p className="text-sm text-[#5C4033] mb-6 max-w-xs">{visitorError}</p>
+                  <button 
+                    onClick={() => {
+                        window.history.replaceState({}, document.title, window.location.pathname);
+                        setSharedItem(null);
+                        setView('list');
+                        window.location.reload();
+                    }}
+                    className="bg-[#8B5E3C] text-white px-6 py-2 rounded-full font-medium shadow-md"
+                  >
+                      返回首頁
+                  </button>
+              </div>
+          );
+      }
+
       if (!sharedItem) return null;
       
       const item = sharedItem;
@@ -1017,8 +1150,8 @@ export default function App() {
           <div className="min-h-screen bg-[#FDFBF7] p-4 pb-20">
               <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl mb-4 text-xs flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <AlertTriangle size={16} />
-                    <span>您正在檢視分享的資料 (唯讀模式)</span>
+                    <LinkIcon size={16} />
+                    <span>訪客檢視模式</span>
                   </div>
                   <button 
                     onClick={() => {
