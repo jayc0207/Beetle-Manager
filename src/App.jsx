@@ -37,7 +37,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -747,6 +747,11 @@ export default function App() {
   };
 
   const handleAddItem = () => {
+    if (!isSignedIn) {
+        alert("請先至「設定」頁面登入 Google 帳戶，方可新增資料。");
+        return;
+    }
+
     setFormData({
       type: activeTab === 'breeding' ? 'breeding' : activeTab === 'larva' ? 'larva' : 'adult',
       customId: generateId(),
@@ -782,6 +787,11 @@ export default function App() {
   };
 
   const handleEditItem = (item) => {
+    if (!isSignedIn) {
+        alert("請先至「設定」頁面登入 Google 帳戶，方可編輯資料。");
+        return;
+    }
+
     // Migration: if item has 'image' but no 'images', put it in array
     let initImages = item.images || [];
     if (initImages.length === 0 && item.image) {
@@ -1153,18 +1163,7 @@ export default function App() {
                     <LinkIcon size={16} />
                     <span>訪客檢視模式</span>
                   </div>
-                  <button 
-                    onClick={() => {
-                        // Clear URL params and go home
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                        setSharedItem(null);
-                        setView('list');
-                        window.location.reload(); // Hard reload to clear clean
-                    }}
-                    className="bg-white px-3 py-1 rounded-full shadow-sm text-yellow-800 font-bold border border-yellow-100 flex items-center gap-1"
-                  >
-                      <Home size={12} /> 返回首頁
-                  </button>
+                  {/* Visitor mode - no back button */}
               </div>
 
               <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden">
