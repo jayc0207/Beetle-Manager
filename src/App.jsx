@@ -1138,6 +1138,424 @@ export default function App() {
           </div>
       );
   };
+  
+  // --- Form View ---
+  const renderForm = () => (
+    <div className="px-5 pb-24 bg-[#FDFBF7] min-h-screen">
+      <div className="flex justify-between items-center py-4 mb-4">
+        <h2 className="text-xl font-bold text-[#4A3B32]">
+          {editingItem ? '編輯資料' : `新增${activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產卵組'}`}
+        </h2>
+        <div className="flex gap-2">
+          {editingItem && (
+            <>
+              <Button variant="ghost" onClick={() => setShowQR(true)}>
+                <QrCode size={20} />
+              </Button>
+              <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)}>
+                <Trash2 size={20} />
+              </Button>
+            </>
+          )}
+          <Button variant="primary" onClick={handleSave} className="!px-6" disabled={isLoading}>
+             {isLoading ? <Loader className="animate-spin" size={18} /> : <Save size={18} />} 
+             {isLoading ? '處理中' : '儲存'}
+          </Button>
+        </div>
+      </div>
+
+      {/* Status Bar for Uploads */}
+      {statusMsg && (
+          <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2 animate-pulse">
+              <UploadCloud size={16} />
+              <span>{statusMsg}</span>
+          </div>
+      )}
+
+      {/* Main Info Section */}
+      <div className="space-y-6">
+        <InputGroup label="基本資訊">
+          <div className="mb-4 bg-[#F5F1E8] rounded-lg p-3">
+             <label className="text-[10px] text-[#A09383] block mb-1">編號 (自動產生)</label>
+             <div className="font-mono text-[#4A3B32] font-bold text-lg">{formData.customId}</div>
+          </div>
+
+          <div className="mb-4">
+             <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">喜好程度</label>
+             <StarRating rating={formData.rating} onChange={(r) => setFormData({...formData, rating: r})} />
+          </div>
+
+          <TextInput 
+            value={formData.name} 
+            onChange={v => setFormData({...formData, name: v})} 
+            placeholder="種類名稱 (如: 長戟大兜蟲)" 
+          />
+          <TextInput 
+            value={formData.scientificName} 
+            onChange={v => setFormData({...formData, scientificName: v})} 
+            placeholder="學名 (如: Dynastes hercules)" 
+            className="text-sm italic"
+          />
+
+          <TextInput 
+            value={formData.origin} 
+            onChange={v => setFormData({...formData, origin: v})} 
+            placeholder="產地 (如: 瓜德羅普島)" 
+          />
+           <TextInput 
+            value={formData.bloodline} 
+            onChange={v => setFormData({...formData, bloodline: v})} 
+            placeholder="血統 (如: C68, HiroKA)" 
+          />
+        </InputGroup>
+
+        {formData.type !== 'breeding' && (
+          <InputGroup label="性別">
+            <SelectButton 
+              options={[
+                { label: '? 不明', value: 'unknown' },
+                { label: '♂ 公', value: 'male' },
+                { label: '♀ 母', value: 'female' },
+              ]}
+              value={formData.gender}
+              onChange={v => setFormData({...formData, gender: v})}
+            />
+          </InputGroup>
+        )}
+
+        <div className="flex gap-4">
+            {formData.type === 'adult' && (
+              <div className="flex-1">
+                 <InputGroup label="體長">
+                    <TextInput 
+                        value={formData.size} 
+                        onChange={v => setFormData({...formData, size: v})} 
+                        placeholder="0.0" 
+                        suffix="mm"
+                    />
+                 </InputGroup>
+              </div>
+            )}
+             {formData.type === 'larva' && (
+              <div className="flex-1">
+                 <InputGroup label="目前體重">
+                    <TextInput 
+                        value={formData.weight} 
+                        onChange={v => setFormData({...formData, weight: v})} 
+                        placeholder="0.0" 
+                        suffix="g"
+                    />
+                 </InputGroup>
+              </div>
+            )}
+        </div>
+
+        <InputGroup label={formData.type === 'adult' ? "羽化日" : formData.type === 'larva' ? "孵化日" : "建立日期"}>
+          <input
+             type="date"
+             value={formData.date}
+             onChange={e => setFormData({...formData, date: e.target.value})}
+             className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium"
+          />
+        </InputGroup>
+
+        <InputGroup label="照片記錄 (可多張)">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+             {formData.images && formData.images.map((img, index) => (
+                 <div key={index} className="aspect-square rounded-lg overflow-hidden relative group bg-white border border-[#E8E1D5]">
+                     <img 
+                        src={img} 
+                        alt={`Record ${index}`} 
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90"
+                        onClick={() => setViewImage(img)}
+                     />
+                     
+                     {/* Heart Button for Cover Image */}
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); setCoverImage(img); }}
+                        className={`absolute top-1 right-1 p-1 rounded-full shadow-sm transition-all ${formData.image === img ? 'bg-white text-red-500 opacity-100' : 'bg-black/30 text-white opacity-0 group-hover:opacity-100 hover:bg-white hover:text-red-500'}`}
+                     >
+                         <Heart size={14} fill={formData.image === img ? "currentColor" : "none"} />
+                     </button>
+
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); removeImage(index); }}
+                        className="absolute bottom-1 right-1 bg-white/80 p-1 rounded-full text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                         <X size={14} />
+                     </button>
+                 </div>
+             ))}
+             <label className="aspect-square rounded-lg border-2 border-dashed border-[#D6CDBF] flex flex-col items-center justify-center cursor-pointer hover:bg-[#F5F1E8] transition-colors">
+                 <Camera size={24} className="text-[#A09383] mb-1" />
+                 <span className="text-[10px] text-[#A09383]">新增</span>
+                 <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    className="hidden" 
+                    onChange={handleMultiImageUpload} 
+                 />
+             </label>
+          </div>
+          <p className="text-[10px] text-[#A09383] text-center mt-1">點擊愛心可設為封面</p>
+        </InputGroup>
+
+        <InputGroup label="累代資訊">
+          <div className="grid grid-cols-2 gap-4">
+             <TextInput 
+                value={formData.parentMale} 
+                onChange={v => setFormData({...formData, parentMale: v})} 
+                placeholder="種親 ♂" 
+                suffix="mm"
+            />
+             <TextInput 
+                value={formData.parentFemale} 
+                onChange={v => setFormData({...formData, parentFemale: v})} 
+                placeholder="種親 ♀" 
+                suffix="mm"
+            />
+          </div>
+          <div className="mt-4">
+            <TextInput 
+                value={formData.generation} 
+                onChange={v => setFormData({...formData, generation: v})} 
+                placeholder="累代 (如: CBF1)" 
+            />
+          </div>
+        </InputGroup>
+
+        <InputGroup label="備註">
+          <textarea 
+             className="w-full bg-[#F5F1E8] rounded-lg p-3 text-sm focus:outline-none min-h-[100px]"
+             placeholder="記錄飼育細節..."
+             value={formData.memo}
+             onChange={e => setFormData({...formData, memo: e.target.value})}
+          />
+        </InputGroup>
+
+        {formData.type === 'breeding' && (
+          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
+            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
+              <Calendar size={14} /> 產卵管理
+            </h3>
+            
+            <div className="space-y-4">
+               <InputGroup label="預計孵化日">
+                 <input
+                    type="date"
+                    value={formData.expectedHatchDate}
+                    onChange={e => setFormData({...formData, expectedHatchDate: e.target.value})}
+                    className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium"
+                 />
+               </InputGroup>
+
+               <div className="flex items-center justify-between bg-[#FDFBF7] p-3 rounded-lg border border-[#F0EBE0]">
+                  <div className="flex items-center gap-2">
+                     <div className={`p-2 rounded-full ${formData.enableEmailNotify ? 'bg-[#F4D06F] text-[#5C4033]' : 'bg-[#E8E1D5] text-[#A09383]'}`}>
+                        <Bell size={18} />
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="text-sm font-bold text-[#5C4033]">電子郵件通知</span>
+                        <span className="text-[10px] text-[#A09383]">將在日期接近時發送提醒</span>
+                     </div>
+                  </div>
+                  <button 
+                     onClick={() => setFormData({...formData, enableEmailNotify: !formData.enableEmailNotify})}
+                     className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${formData.enableEmailNotify ? 'bg-[#8B5E3C]' : 'bg-[#D6CDBF]'}`}
+                  >
+                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${formData.enableEmailNotify ? 'translate-x-6' : 'translate-x-0'}`} />
+                  </button>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {formData.type === 'larva' && (
+          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
+            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
+              <Leaf size={14} /> 成長記錄
+            </h3>
+            
+            <div className="space-y-2">
+                {/* Header */}
+                <div className="flex text-xs text-[#A09383] px-1">
+                    <div className="flex-1">日期</div>
+                    <div className="flex-1 text-center">幼蟲期</div>
+                    <div className="flex-1 text-right">重量 (g)</div>
+                    <div className="w-6"></div>
+                </div>
+
+                {/* Rows */}
+                {formData.larvaRecords && formData.larvaRecords.map((record, index) => (
+                    <div key={index} className="flex items-center gap-2 border-b border-[#F0EBE0] pb-2 last:border-0">
+                        <input 
+                            type="date" 
+                            value={record.date}
+                            onChange={(e) => updateLarvaRecord(index, 'date', e.target.value)}
+                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0"
+                        />
+                        <select
+                            value={record.stage}
+                            onChange={(e) => updateLarvaRecord(index, 'stage', e.target.value)}
+                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center"
+                        >
+                            <option value="L1">L1</option>
+                            <option value="L2">L2</option>
+                            <option value="L3">L3</option>
+                            <option value="化蛹">化蛹</option>
+                            <option value="羽化">羽化</option>
+                        </select>
+                        <input 
+                            type="number" 
+                            placeholder="0.0"
+                            value={record.weight}
+                            onChange={(e) => updateLarvaRecord(index, 'weight', e.target.value)}
+                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-right min-w-0"
+                        />
+                        <button onClick={() => removeLarvaRecord(index)} className="w-6 text-red-400">
+                            <X size={14} />
+                        </button>
+                    </div>
+                ))}
+
+                <button 
+                    onClick={addLarvaRecord}
+                    className="w-full py-2 border border-dashed border-[#D6CDBF] text-[#8B5E3C] text-xs rounded-lg mt-2 hover:bg-[#FDFBF7]"
+                >
+                    + 新增記錄
+                </button>
+
+                {/* Important Photos */}
+                <div className="pt-4 border-t border-[#F0EBE0] mt-4">
+                    <h4 className="font-bold text-[#8B5E3C] text-xs mb-3">重要階段記錄照</h4>
+                    <div className="flex gap-3">
+                        <div className="flex-1">
+                            <label className="text-xs text-[#5C4033] mb-1 block">化蛹照</label>
+                            <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
+                                {formData.pupationImage ? (
+                                    <>
+                                        <img src={formData.pupationImage} alt="Pupation" 
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer" 
+                                            onClick={() => setViewImage(formData.pupationImage)}
+                                        />
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, pupationImage: null}); }}
+                                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <label className="flex flex-col items-center cursor-pointer text-[#A09383] w-full h-full justify-center">
+                                        <Camera size={20} className="mb-1" />
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'pupationImage')} />
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+                        <div className="flex-1">
+                            <label className="text-xs text-[#5C4033] mb-1 block">羽化照</label>
+                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
+                                {formData.emergenceImage ? (
+                                    <>
+                                        <img src={formData.emergenceImage} alt="Emergence" 
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
+                                            onClick={() => setViewImage(formData.emergenceImage)}
+                                        />
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, emergenceImage: null}); }}
+                                            className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
+                                        >
+                                            <X size={14} />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <label className="flex flex-col items-center cursor-pointer text-[#A09383] w-full h-full justify-center">
+                                        <Camera size={20} className="mb-1" />
+                                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'emergenceImage')} />
+                                    </label>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+          </div>
+        )}
+
+        {formData.type === 'adult' && (
+          <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
+            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1">
+              <Calendar size={14} /> 生命歷程 (成蟲限定)
+            </h3>
+            
+            <div className="grid grid-cols-1 gap-4">
+              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
+                 <label className="text-sm text-[#5C4033]">取得日</label>
+                 <input
+                    type="date"
+                    value={formData.acquisitionDate}
+                    onChange={e => setFormData({...formData, acquisitionDate: e.target.value})}
+                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
+                 />
+              </div>
+              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
+                 <label className="text-sm text-[#5C4033]">開吃日</label>
+                 <input
+                    type="date"
+                    value={formData.startFeedingDate}
+                    onChange={e => setFormData({...formData, startFeedingDate: e.target.value})}
+                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
+                 />
+              </div>
+              <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
+                 <label className="text-sm text-[#5C4033]">死亡日</label>
+                 <input
+                    type="date"
+                    value={formData.deathDate}
+                    onChange={e => setFormData({...formData, deathDate: e.target.value})}
+                    className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none"
+                 />
+              </div>
+            </div>
+
+            <InputGroup label="標本照">
+                <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-4 flex flex-col items-center justify-center bg-[#FDFBF7] min-h-[120px]">
+                    {formData.specimenImage ? (
+                    <div className="relative w-full h-32">
+                        <img src={formData.specimenImage} alt="Specimen" 
+                            className="w-full h-full object-contain rounded-lg opacity-80 cursor-pointer" 
+                            onClick={() => setViewImage(formData.specimenImage)}
+                        />
+                        <button 
+                        onClick={(e) => { e.stopPropagation(); setFormData({...formData, specimenImage: null}); }}
+                        className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
+                        >
+                        <X size={14} />
+                        </button>
+                    </div>
+                    ) : (
+                    <label className="flex flex-col items-center cursor-pointer text-[#A09383]">
+                        <Camera size={24} className="mb-2" />
+                        <span className="text-xs">上傳標本記錄</span>
+                        <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'specimenImage')} />
+                    </label>
+                    )}
+                </div>
+            </InputGroup>
+          </div>
+        )}
+
+        <div className="bg-[#E8E1D5] bg-opacity-30 p-4 rounded-lg flex items-center gap-2 text-xs text-[#8B5E3C]">
+           <Database size={14} />
+           <span>資料將自動保存於 {isSignedIn ? 'Google 試算表' : '本地儲存 (未連線)'}</span>
+        </div>
+      </div>
+
+      {renderImageViewer()}
+    </div>
+  );
 
   const renderHeader = () => (
     <div className="bg-[#FDFBF7] p-4 sticky top-0 z-10 shadow-sm">
@@ -1407,7 +1825,7 @@ export default function App() {
 
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v2.0.2 (Fix Missing Func)</span>
+                  <span className="text-xs text-[#A09383]">v2.0.3 (Fix Form Render)</span>
               </div>
           </div>
           
