@@ -36,7 +36,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 請確認這裡已填入
+const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -308,9 +308,15 @@ export default function App() {
   };
 
   const handleAuthClick = () => {
+    // Check if CLIENT_ID is still the placeholder or empty
+    if (CLIENT_ID.includes('YOUR_GOOGLE_CLIENT_ID_HERE') || !CLIENT_ID) {
+        alert("【設定未完成】\n\n您尚未設定 Google Client ID。\n請回到程式碼編輯區，將最上方的 CLIENT_ID 變數替換為您從 Google Cloud Console 申請的真實 ID。\n\n目前數值仍為範例，因此無法登入。");
+        return;
+    }
+
     setErrorMsg('');
     if (!tokenClient) {
-        alert("Google 服務初始化失敗。請檢查網路或 Client ID 設定。");
+        alert("Google 服務初始化失敗。請檢查網路或 Client ID 設定是否正確。");
         return;
     }
 
