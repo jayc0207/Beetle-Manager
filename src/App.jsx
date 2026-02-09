@@ -19,13 +19,20 @@ import {
   Loader,
   AlertTriangle,
   RefreshCw,
-  UploadCloud
+  UploadCloud,
+  Star,
+  Maximize2,
+  Heart,
+  Download,
+  Upload,
+  ArrowUpDown,
+  FileJson
 } from 'lucide-react';
 
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 請確認這裡已填入
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 請確認這裡已填入
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -82,14 +89,15 @@ const InputGroup = ({ label, children, icon }) => (
   </div>
 );
 
-const TextInput = ({ value, onChange, placeholder, suffix }) => (
-  <div className="relative">
+const TextInput = ({ value, onChange, placeholder, suffix, readOnly, className = '' }) => (
+  <div className="relative mb-2">
     <input
       type="text"
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={(e) => onChange && onChange(e.target.value)}
       placeholder={placeholder}
-      className="w-full bg-transparent border-b border-[#D6CDBF] py-2 text-[#4A3B32] focus:outline-none focus:border-[#8B5E3C] placeholder-[#B0A695]"
+      readOnly={readOnly}
+      className={`w-full bg-transparent border-b border-[#D6CDBF] py-2 text-[#4A3B32] focus:outline-none focus:border-[#8B5E3C] placeholder-[#B0A695] ${readOnly ? 'opacity-70 cursor-not-allowed' : ''} ${className}`}
     />
     {suffix && <span className="absolute right-0 top-2 text-[#8B5E3C] text-sm">{suffix}</span>}
   </div>
@@ -113,6 +121,28 @@ const SelectButton = ({ options, value, onChange }) => (
   </div>
 );
 
+const StarRating = ({ rating, onChange, readOnly = false }) => {
+  return (
+    <div className="flex gap-1">
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          onClick={() => !readOnly && onChange(star)}
+          disabled={readOnly}
+          className={`focus:outline-none transition-transform ${!readOnly ? 'active:scale-110 hover:scale-110' : ''}`}
+        >
+          <Star 
+            size={readOnly ? 14 : 24} 
+            fill={star <= rating ? "#F4D06F" : "none"} 
+            className={star <= rating ? "text-[#F4D06F]" : "text-[#D6CDBF]"}
+          />
+        </button>
+      ))}
+    </div>
+  );
+};
+
 // --- Google API Helper Functions ---
 
 const loadGoogleScript = (callback) => {
@@ -128,11 +158,18 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('adult');
   const [view, setView] = useState('list');
   const [data, setData] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState('id'); // 'id', 'name', 'rating', 'date'
+  const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
+  
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [statusMsg, setStatusMsg] = useState(''); // Loading status message
+  const [statusMsg, setStatusMsg] = useState(''); 
   const [errorMsg, setErrorMsg] = useState('');
+  
+  // Image Viewer State
+  const [viewImage, setViewImage] = useState(null);
   
   // Google Auth State
   const [gapiInited, setGapiInited] = useState(false);
@@ -146,8 +183,12 @@ export default function App() {
   // Form State
   const [formData, setFormData] = useState({
     type: 'adult',
+    customId: '',
+    rating: 0,
     name: '',
+    scientificName: '',
     origin: '',
+    bloodline: '',
     gender: 'unknown',
     size: '',
     weight: '',
@@ -162,6 +203,7 @@ export default function App() {
     specimenImage: null,
     pupationImage: null,
     emergenceImage: null,
+    images: [],
     image: null,
     status: 'active',
     larvaRecords: [],
@@ -280,8 +322,6 @@ export default function App() {
     if (result.error) throw result.error;
     
     // Construct a viewable thumbnail link. 
-    // thumbnailLink usually works but might expire or be small. 
-    // Using this hack for persistent thumbnail access via API key/token context
     return `https://drive.google.com/thumbnail?authuser=0&sz=w1024&id=${result.id}`;
   };
 
@@ -359,7 +399,7 @@ export default function App() {
       
       // Deep clone to modify
       let processedData = JSON.parse(JSON.stringify(newData));
-      const imageFields = ['image', 'specimenImage', 'pupationImage', 'emergenceImage'];
+      const singleImageFields = ['specimenImage', 'pupationImage', 'emergenceImage'];
 
       // If signed in, check for Base64 images and upload them
       if (isSignedIn && spreadsheetId) {
@@ -369,24 +409,58 @@ export default function App() {
               // Helper to check and upload
               const processItem = async (item) => {
                   let modified = false;
-                  for (const field of imageFields) {
+
+                  // 1. Process single fields
+                  for (const field of singleImageFields) {
                       if (item[field] && item[field].startsWith('data:image')) {
-                          setStatusMsg(`正在上傳圖片 (${++uploadCount})...`);
+                          setStatusMsg(`正在上傳照片...`);
                           try {
                               const driveLink = await uploadImageToDrive(item[field], `beetle_${field}_${item.id}_${Date.now()}.jpg`);
-                              item[field] = driveLink; // Replace Base64 with Link
+                              item[field] = driveLink;
                               modified = true;
                           } catch (err) {
-                              console.error(`Failed to upload ${field} for ${item.id}`, err);
-                              // Keep Base64 if fail, or handle error
+                              console.error(`Failed to upload ${field}`, err);
                           }
                       }
                   }
+
+                  // 2. Process images array
+                  if (item.images && item.images.length > 0) {
+                     const newImages = [];
+                     for (let i = 0; i < item.images.length; i++) {
+                         const img = item.images[i];
+                         if (img.startsWith('data:image')) {
+                             setStatusMsg(`正在上傳相簿 (${i+1}/${item.images.length})...`);
+                             try {
+                                 const driveLink = await uploadImageToDrive(img, `beetle_album_${item.id}_${i}_${Date.now()}.jpg`);
+                                 newImages.push(driveLink);
+                                 modified = true;
+                             } catch (err) {
+                                 console.error(`Failed to upload album image ${i}`, err);
+                                 newImages.push(img); 
+                             }
+                         } else {
+                             newImages.push(img);
+                         }
+                     }
+                     item.images = newImages;
+                     
+                     // 3. Smart Sync Logic for Cover Image (item.image)
+                     if (item.image && item.image.startsWith('data:image')) {
+                         if (!item.images.includes(item.image)) {
+                             item.image = item.images[0];
+                         }
+                     }
+                     
+                     // If no cover set, default to first
+                     if (!item.image && item.images.length > 0) {
+                         item.image = item.images[0];
+                     }
+                  }
+
                   return item;
               };
 
-              // Process all items (handle Promise.all for speed)
-              // Note: If array is huge, this might hit rate limits, but ok for personal use
               processedData = await Promise.all(processedData.map(processItem));
               
           } catch (e) {
@@ -451,13 +525,77 @@ export default function App() {
       alert(fullMsg);
   };
 
+  // --- Data Management Functions ---
+  const handleExportJson = () => {
+    const jsonString = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = href;
+    link.download = `beetle_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleImportJson = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const importedData = JSON.parse(event.target.result);
+        if (Array.isArray(importedData)) {
+          if (confirm(`確定要匯入 ${importedData.length} 筆資料嗎？這將會「覆蓋」目前的資料！`)) {
+             processAndSaveData(importedData);
+             alert("資料匯入成功！");
+          }
+        } else {
+          alert("匯入失敗：檔案格式不正確 (必須是 JSON 陣列)");
+        }
+      } catch (err) {
+        alert("匯入失敗：檔案無法讀取或格式錯誤");
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+    // Reset input
+    e.target.value = ''; 
+  };
+
+  const handleClearAllData = () => {
+      if (confirm("警告：此操作將刪除「所有」資料且無法復原！\n\n確定要清空嗎？")) {
+          if (confirm("再次確認：您真的要清空所有資料嗎？")) {
+              processAndSaveData([]);
+              alert("已清空所有資料。");
+          }
+      }
+  };
+
+
   // --- App Logic ---
+
+  const generateId = () => {
+    const now = new Date();
+    // 格式: YYYYMMDD-HHmm (例如 20231027-0930)
+    const year = now.getFullYear();
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const day = now.getDate().toString().padStart(2, '0');
+    const hour = now.getHours().toString().padStart(2, '0');
+    const minute = now.getMinutes().toString().padStart(2, '0');
+    return `${year}${month}${day}-${hour}${minute}`;
+  };
 
   const handleAddItem = () => {
     setFormData({
       type: activeTab === 'breeding' ? 'breeding' : activeTab === 'larva' ? 'larva' : 'adult',
+      customId: generateId(),
+      rating: 0,
       name: '',
+      scientificName: '',
       origin: '',
+      bloodline: '',
       gender: 'unknown',
       size: '',
       weight: '',
@@ -472,6 +610,7 @@ export default function App() {
       specimenImage: null,
       pupationImage: null,
       emergenceImage: null,
+      images: [],
       image: null,
       status: 'active',
       larvaRecords: [],
@@ -484,8 +623,20 @@ export default function App() {
   };
 
   const handleEditItem = (item) => {
+    // Migration: if item has 'image' but no 'images', put it in array
+    let initImages = item.images || [];
+    if (initImages.length === 0 && item.image) {
+        initImages = [item.image];
+    }
+
     setFormData({ 
         ...item, 
+        customId: item.customId || item.id.substring(0, 13), 
+        rating: item.rating || 0,
+        scientificName: item.scientificName || '',
+        bloodline: item.bloodline || '',
+        images: initImages,
+        image: item.image || (initImages.length > 0 ? initImages[0] : null), // Ensure cover image is set
         larvaRecords: item.larvaRecords || [],
         expectedHatchDate: item.expectedHatchDate || '',
         enableEmailNotify: item.enableEmailNotify || false
@@ -500,14 +651,24 @@ export default function App() {
       return;
     }
 
+    // Logic: If user didn't select a cover (formData.image is null), default to first image
+    const dataToSave = { ...formData };
+    if (dataToSave.images.length > 0) {
+        // If current image is not in the list (e.g. deleted) or null, default to first
+        if (!dataToSave.image || !dataToSave.images.includes(dataToSave.image)) {
+             dataToSave.image = dataToSave.images[0];
+        }
+    } else {
+        dataToSave.image = null;
+    }
+
     let newData;
     if (editingItem) {
-      newData = data.map(item => item.id === editingItem.id ? formData : item);
+      newData = data.map(item => item.id === editingItem.id ? dataToSave : item);
     } else {
-      newData = [...data, { ...formData, id: Date.now().toString() }];
+      newData = [...data, { ...dataToSave, id: Date.now().toString() }];
     }
     
-    // Replace saveToCloud with processAndSaveData
     processAndSaveData(newData);
     setView('list');
   };
@@ -520,10 +681,49 @@ export default function App() {
     }
   };
 
+  const handleMultiImageUpload = (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      // Process all files
+      files.forEach(file => {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            setFormData(prev => ({ 
+                ...prev, 
+                images: [...prev.images, reader.result] 
+            }));
+          };
+          reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index) => {
+      setFormData(prev => {
+          const imgToRemove = prev.images[index];
+          const newImages = prev.images.filter((_, i) => i !== index);
+          
+          // If deleted image was the cover, reset cover to first of remaining or null
+          let newCover = prev.image;
+          if (newCover === imgToRemove) {
+              newCover = newImages.length > 0 ? newImages[0] : null;
+          }
+
+          return {
+              ...prev,
+              images: newImages,
+              image: newCover
+          };
+      });
+  };
+
+  const setCoverImage = (img) => {
+      setFormData(prev => ({ ...prev, image: img }));
+  };
+
   const handleImageUpload = (e, fieldName = 'image') => {
     const file = e.target.files[0];
     if (file) {
-      // Still read as Base64 for immediate local preview
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
@@ -541,15 +741,81 @@ export default function App() {
   const removeLarvaRecord = (index) => setFormData(prev => ({ ...prev, larvaRecords: prev.larvaRecords.filter((_, i) => i !== index) }));
   const updateLarvaRecord = (index, field, value) => setFormData(prev => ({ ...prev, larvaRecords: prev.larvaRecords.map((item, i) => i === index ? { ...item, [field]: value } : item) }));
 
-  // --- Filter ---
-  const filteredData = data.filter(item => {
+  // --- Filter and Sort ---
+  
+  // 1. Filter by Tab
+  let processedData = data.filter(item => {
     if (activeTab === 'adult') return item.type === 'adult';
     if (activeTab === 'larva') return item.type === 'larva';
     if (activeTab === 'breeding') return item.type === 'breeding';
     return true;
   });
 
+  // 2. Filter by Search Query
+  if (searchQuery) {
+      const lowerQuery = searchQuery.toLowerCase();
+      processedData = processedData.filter(item => {
+          return (
+              (item.name && item.name.toLowerCase().includes(lowerQuery)) ||
+              (item.customId && item.customId.toLowerCase().includes(lowerQuery)) ||
+              (item.origin && item.origin.toLowerCase().includes(lowerQuery)) ||
+              (item.scientificName && item.scientificName.toLowerCase().includes(lowerQuery)) ||
+              (item.bloodline && item.bloodline.toLowerCase().includes(lowerQuery))
+          );
+      });
+  }
+
+  // 3. Sort
+  processedData.sort((a, b) => {
+      let valA, valB;
+      
+      switch (sortBy) {
+          case 'name':
+              valA = a.name || '';
+              valB = b.name || '';
+              break;
+          case 'rating':
+              valA = a.rating || 0;
+              valB = b.rating || 0;
+              break;
+          case 'date': // using created/record date
+              valA = a.date || '';
+              valB = b.date || '';
+              break;
+          case 'id':
+          default:
+              valA = a.customId || a.id || '';
+              valB = b.customId || b.id || '';
+              break;
+      }
+
+      if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
+      if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
+      return 0;
+  });
+
+
   // --- Views ---
+
+  const renderImageViewer = () => {
+      if (!viewImage) return null;
+      return (
+          <div className="fixed inset-0 z-50 bg-black bg-opacity-95 flex items-center justify-center p-4" onClick={() => setViewImage(null)}>
+              <button 
+                  onClick={() => setViewImage(null)}
+                  className="absolute top-4 right-4 text-white p-2"
+              >
+                  <X size={32} />
+              </button>
+              <img 
+                  src={viewImage} 
+                  alt="Full view" 
+                  className="max-w-full max-h-full object-contain" 
+                  onClick={(e) => e.stopPropagation()} 
+              />
+          </div>
+      );
+  };
 
   const renderHeader = () => (
     <div className="bg-[#FDFBF7] p-4 sticky top-0 z-10 shadow-sm">
@@ -559,14 +825,50 @@ export default function App() {
              <ChevronRight className="rotate-180" />
           </button>
         )}
+        
+        {/* Search Bar */}
         <div className="flex-1 bg-[#F0EBE0] rounded-full px-4 py-2 flex items-center gap-2">
           <Search size={18} className="text-[#A09383]" />
           <input 
             type="text" 
             placeholder="搜尋種類、產地..." 
             className="bg-transparent w-full text-sm focus:outline-none text-[#5C4033] placeholder-[#A09383]"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+
+        {/* Sort Button (Cycle through options) */}
+        {view === 'list' && activeTab !== 'settings' && (
+            <button 
+                onClick={() => {
+                    // Cycle sort: id -> name -> rating -> date -> id...
+                    // Or click to change field, long press/secondary click to change order? 
+                    // Let's implement simple cycle for field, and separate toggle for order
+                    const modes = ['id', 'name', 'rating', 'date'];
+                    const nextMode = modes[(modes.indexOf(sortBy) + 1) % modes.length];
+                    setSortBy(nextMode);
+                }}
+                className="flex flex-col items-center justify-center w-8 h-8 rounded-full bg-[#E8E1D5] text-[#8B5E3C] text-[10px] font-bold"
+                title={`排序依據: ${sortBy}`}
+            >
+                {sortBy === 'id' && '編號'}
+                {sortBy === 'name' && '名稱'}
+                {sortBy === 'rating' && '星星'}
+                {sortBy === 'date' && '日期'}
+            </button>
+        )}
+
+        {/* Sort Order Toggle */}
+        {view === 'list' && activeTab !== 'settings' && (
+             <button 
+                onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+                className="w-8 h-8 rounded-full bg-[#E8E1D5] text-[#8B5E3C] flex items-center justify-center"
+             >
+                 <ArrowUpDown size={14} className={sortOrder === 'asc' ? '' : 'rotate-180'} />
+             </button>
+        )}
+
         <div className="text-[#8B5E3C] font-bold">AZ</div>
       </div>
       {view === 'list' && (
@@ -634,55 +936,67 @@ export default function App() {
           </div>
       )}
 
-      {filteredData.length === 0 ? renderEmptyState() : (
+      {processedData.length === 0 ? renderEmptyState() : (
         <div className="grid gap-3">
-          {filteredData.map((item) => (
-            <div 
-              key={item.id} 
-              onClick={() => handleEditItem(item)}
-              className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden"
-            >
-              <div className="w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center">
-                {item.image ? (
-                  <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                ) : (
-                  <Bug className="text-[#D6CDBF]" />
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex justify-between items-start">
-                  <h3 className="font-bold text-[#4A3B32]">{item.name || '未命名'}</h3>
-                  <div className="flex gap-1">
-                    {item.type === 'breeding' && item.enableEmailNotify && (
-                         <div className="text-[#F4D06F] bg-[#FDFBF7] p-1 rounded-full border border-[#F0EBE0]">
-                             <Bell size={12} fill="#F4D06F" />
-                         </div>
+          {processedData.map((item) => {
+             // Logic for thumbnail display: 
+             // 1. If dead and has specimen photo -> Specimen Photo (Grayscale)
+             // 2. Else -> Favorite Photo (item.image)
+             const isDead = item.type === 'adult' && item.deathDate;
+             const showSpecimen = isDead && item.specimenImage;
+             const displayImage = showSpecimen ? item.specimenImage : (item.image || (item.images && item.images[0]));
+
+             return (
+                <div 
+                key={item.id} 
+                onClick={() => handleEditItem(item)}
+                className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden"
+                >
+                <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${showSpecimen ? 'grayscale opacity-80' : ''}`}>
+                    {displayImage ? (
+                    <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                    <Bug className="text-[#D6CDBF]" />
                     )}
-                    <span className="text-xs px-2 py-0.5 rounded bg-[#F5F1E8] text-[#8B5E3C]">
-                        {item.generation || 'CB'}
-                    </span>
-                  </div>
                 </div>
-                <p className="text-xs text-[#A09383] mt-1">{item.origin || '未知產地'}</p>
-                <div className="mt-2 flex items-center gap-3 text-sm">
-                  {item.gender !== 'unknown' && (
-                    <span className={`flex items-center gap-1 ${item.gender === 'male' ? 'text-blue-500' : 'text-red-500'}`}>
-                      {item.gender === 'male' ? '♂' : '♀'} 
-                      {item.type === 'adult' ? `${item.size}mm` : `${item.weight}g`}
+                <div className="flex-1">
+                    <div className="flex justify-between items-start">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] text-[#A09383] font-mono mb-0.5">{item.customId}</span>
+                        <h3 className="font-bold text-[#4A3B32]">{item.name || '未命名'}</h3>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                        <span className="text-xs px-2 py-0.5 rounded bg-[#F5F1E8] text-[#8B5E3C]">
+                            {item.generation || 'CB'}
+                        </span>
+                        {item.rating > 0 && <StarRating rating={item.rating} readOnly={true} />}
+                    </div>
+                    </div>
+                    {item.scientificName && (
+                        <p className="text-xs text-[#8B5E3C] italic -mt-0.5 mb-1">{item.scientificName}</p>
+                    )}
+                    <p className="text-xs text-[#A09383]">{item.origin || '未知產地'}</p>
+                    <div className="mt-2 flex items-center gap-3 text-sm">
+                    {item.gender !== 'unknown' && (
+                        <span className={`flex items-center gap-1 ${item.gender === 'male' ? 'text-blue-500' : 'text-red-500'}`}>
+                        {item.gender === 'male' ? '♂' : '♀'} 
+                        {item.type === 'adult' ? `${item.size}mm` : `${item.weight}g`}
+                        </span>
+                    )}
+                    {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
+                        <span className="text-xs text-[#8B5E3C] bg-[#E8DCC8] px-1 rounded ml-1">
+                            {item.larvaRecords[item.larvaRecords.length - 1].stage}
+                        </span>
+                    )}
+                    <span className="text-xs text-[#A09383] ml-auto">
+                        {item.date}
+                        {item.type === 'adult' && item.deathDate ? ` ~ ${item.deathDate}` : ''}
                     </span>
-                  )}
-                  {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
-                      <span className="text-xs text-[#8B5E3C] bg-[#E8DCC8] px-1 rounded ml-1">
-                          {item.larvaRecords[item.larvaRecords.length - 1].stage}
-                      </span>
-                  )}
-                  <span className="text-xs text-[#A09383] ml-auto">
-                    {item.date}
-                  </span>
+                    </div>
                 </div>
-              </div>
-            </div>
-          ))}
+                </div>
+             );
+          })}
         </div>
       )}
       
@@ -731,15 +1045,37 @@ export default function App() {
       {/* Main Info Section */}
       <div className="space-y-6">
         <InputGroup label="基本資訊">
+          <div className="mb-4 bg-[#F5F1E8] rounded-lg p-3">
+             <label className="text-[10px] text-[#A09383] block mb-1">編號 (自動產生)</label>
+             <div className="font-mono text-[#4A3B32] font-bold text-lg">{formData.customId}</div>
+          </div>
+
+          <div className="mb-4">
+             <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">喜好程度</label>
+             <StarRating rating={formData.rating} onChange={(r) => setFormData({...formData, rating: r})} />
+          </div>
+
           <TextInput 
             value={formData.name} 
             onChange={v => setFormData({...formData, name: v})} 
             placeholder="種類名稱 (如: 長戟大兜蟲)" 
           />
           <TextInput 
+            value={formData.scientificName} 
+            onChange={v => setFormData({...formData, scientificName: v})} 
+            placeholder="學名 (如: Dynastes hercules)" 
+            className="text-sm italic"
+          />
+
+          <TextInput 
             value={formData.origin} 
             onChange={v => setFormData({...formData, origin: v})} 
             placeholder="產地 (如: 瓜德羅普島)" 
+          />
+           <TextInput 
+            value={formData.bloodline} 
+            onChange={v => setFormData({...formData, bloodline: v})} 
+            placeholder="血統 (如: C68, HiroKA)" 
           />
         </InputGroup>
 
@@ -793,26 +1129,46 @@ export default function App() {
           />
         </InputGroup>
 
-        <InputGroup label="照片記錄 (上傳至雲端)">
-          <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-4 flex flex-col items-center justify-center bg-[#FDFBF7] min-h-[150px]">
-            {formData.image ? (
-              <div className="relative w-full h-48">
-                <img src={formData.image} alt="Upload" className="w-full h-full object-contain rounded-lg" />
-                <button 
-                  onClick={() => setFormData({...formData, image: null})}
-                  className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
-                >
-                  <X size={16} />
-                </button>
-              </div>
-            ) : (
-              <label className="flex flex-col items-center cursor-pointer text-[#A09383]">
-                <Camera size={32} className="mb-2" />
-                <span className="text-sm">點擊上傳照片</span>
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleImageUpload(e, 'image')} />
-              </label>
-            )}
+        <InputGroup label="照片記錄 (可多張)">
+          <div className="grid grid-cols-3 gap-2 mb-2">
+             {formData.images && formData.images.map((img, index) => (
+                 <div key={index} className="aspect-square rounded-lg overflow-hidden relative group bg-white border border-[#E8E1D5]">
+                     <img 
+                        src={img} 
+                        alt={`Record ${index}`} 
+                        className="w-full h-full object-cover cursor-pointer hover:opacity-90"
+                        onClick={() => setViewImage(img)}
+                     />
+                     
+                     {/* Heart Button for Cover Image */}
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); setCoverImage(img); }}
+                        className={`absolute top-1 right-1 p-1 rounded-full shadow-sm transition-all ${formData.image === img ? 'bg-white text-red-500 opacity-100' : 'bg-black/30 text-white opacity-0 group-hover:opacity-100 hover:bg-white hover:text-red-500'}`}
+                     >
+                         <Heart size={14} fill={formData.image === img ? "currentColor" : "none"} />
+                     </button>
+
+                     <button 
+                        onClick={(e) => { e.stopPropagation(); removeImage(index); }}
+                        className="absolute bottom-1 right-1 bg-white/80 p-1 rounded-full text-red-500 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                     >
+                         <X size={14} />
+                     </button>
+                 </div>
+             ))}
+             <label className="aspect-square rounded-lg border-2 border-dashed border-[#D6CDBF] flex flex-col items-center justify-center cursor-pointer hover:bg-[#F5F1E8] transition-colors">
+                 <Camera size={24} className="text-[#A09383] mb-1" />
+                 <span className="text-[10px] text-[#A09383]">新增</span>
+                 <input 
+                    type="file" 
+                    accept="image/*" 
+                    multiple 
+                    className="hidden" 
+                    onChange={handleMultiImageUpload} 
+                 />
+             </label>
           </div>
+          <p className="text-[10px] text-[#A09383] text-center mt-1">點擊愛心可設為封面</p>
         </InputGroup>
 
         <InputGroup label="累代資訊">
@@ -949,9 +1305,12 @@ export default function App() {
                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
                                 {formData.pupationImage ? (
                                     <>
-                                        <img src={formData.pupationImage} alt="Pupation" className="w-full h-full object-cover rounded-lg" />
+                                        <img src={formData.pupationImage} alt="Pupation" 
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer" 
+                                            onClick={() => setViewImage(formData.pupationImage)}
+                                        />
                                         <button 
-                                            onClick={() => setFormData({...formData, pupationImage: null})}
+                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, pupationImage: null}); }}
                                             className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
                                         >
                                             <X size={14} />
@@ -970,9 +1329,12 @@ export default function App() {
                              <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
                                 {formData.emergenceImage ? (
                                     <>
-                                        <img src={formData.emergenceImage} alt="Emergence" className="w-full h-full object-cover rounded-lg" />
+                                        <img src={formData.emergenceImage} alt="Emergence" 
+                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
+                                            onClick={() => setViewImage(formData.emergenceImage)}
+                                        />
                                         <button 
-                                            onClick={() => setFormData({...formData, emergenceImage: null})}
+                                            onClick={(e) => { e.stopPropagation(); setFormData({...formData, emergenceImage: null}); }}
                                             className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"
                                         >
                                             <X size={14} />
@@ -1032,9 +1394,12 @@ export default function App() {
                 <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-4 flex flex-col items-center justify-center bg-[#FDFBF7] min-h-[120px]">
                     {formData.specimenImage ? (
                     <div className="relative w-full h-32">
-                        <img src={formData.specimenImage} alt="Specimen" className="w-full h-full object-contain rounded-lg opacity-80" />
+                        <img src={formData.specimenImage} alt="Specimen" 
+                            className="w-full h-full object-contain rounded-lg opacity-80 cursor-pointer" 
+                            onClick={() => setViewImage(formData.specimenImage)}
+                        />
                         <button 
-                        onClick={() => setFormData({...formData, specimenImage: null})}
+                        onClick={(e) => { e.stopPropagation(); setFormData({...formData, specimenImage: null}); }}
                         className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"
                         >
                         <X size={14} />
@@ -1057,6 +1422,8 @@ export default function App() {
            <span>資料將自動保存於 {isSignedIn ? 'Google 試算表' : '本地儲存 (未連線)'}</span>
         </div>
       </div>
+
+      {renderImageViewer()}
     </div>
   );
 
@@ -1133,13 +1500,36 @@ export default function App() {
                   </div>
               </div>
 
-              <div className="p-4 border-b border-[#F0EBE0] flex items-center justify-between">
-                  <span className="text-[#4A3B32] font-medium">匯出資料 (JSON)</span>
-                  <ChevronRight size={18} className="text-[#D6CDBF]" />
+              {/* Data Management Section */}
+              <div className="p-4 border-b border-[#F0EBE0] space-y-3">
+                  <h4 className="text-xs font-bold text-[#8B5E3C] flex items-center gap-2">
+                      <Database size={14} /> 資料管理
+                  </h4>
+                  
+                  <div className="flex gap-2">
+                      <button 
+                        onClick={handleExportJson}
+                        className="flex-1 bg-[#F5F1E8] text-[#5C4033] py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-[#E8DCC8]"
+                      >
+                          <Download size={14} /> 匯出備份 (JSON)
+                      </button>
+                      <label className="flex-1 bg-[#F5F1E8] text-[#5C4033] py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-[#E8DCC8] cursor-pointer">
+                          <Upload size={14} /> 匯入還原
+                          <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
+                      </label>
+                  </div>
+                  
+                  <button 
+                    onClick={handleClearAllData}
+                    className="w-full border border-red-200 text-red-500 py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-red-50"
+                  >
+                      <Trash2 size={14} /> 清除所有資料 (慎用)
+                  </button>
               </div>
+
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v1.4.0 (Cloud+Upload)</span>
+                  <span className="text-xs text-[#A09383]">v1.8.0 (Tools+Sort)</span>
               </div>
           </div>
           
