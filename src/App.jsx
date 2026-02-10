@@ -39,7 +39,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -2241,6 +2241,84 @@ export default function App() {
         <Plus size={28} />
       </button>
     </div>
+  );
+
+  const renderSettings = () => (
+      <div className="px-4 pb-24 space-y-4">
+        {/* Google Account Section */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0]">
+          <h3 className="font-bold text-[#8B5E3C] mb-3 flex items-center gap-2">
+            <Cloud size={18} /> 雲端同步
+          </h3>
+          
+          {!isSignedIn ? (
+            <div className="text-center">
+               <p className="text-sm text-gray-500 mb-4">登入 Google 帳號以備份資料並在多裝置間同步。</p>
+               <Button variant="google" onClick={handleAuthClick} className="w-full justify-center">
+                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
+                 連結 Google 帳號
+               </Button>
+            </div>
+          ) : (
+            <div>
+               <div className="flex items-center justify-between mb-4 bg-green-50 p-3 rounded-lg border border-green-100">
+                  <div className="flex items-center gap-2">
+                     <div className="w-8 h-8 bg-green-200 rounded-full flex items-center justify-center text-green-700 font-bold">
+                        {userProfile?.email?.charAt(0).toUpperCase() || 'G'}
+                     </div>
+                     <div className="flex flex-col">
+                        <span className="text-sm font-bold text-green-800">已連線</span>
+                        <span className="text-[10px] text-green-600 truncate max-w-[150px]">{userProfile?.email || 'Google User'}</span>
+                     </div>
+                  </div>
+                  <Button variant="outline" onClick={handleSignOutClick} className="!px-3 !py-1 text-xs h-8">
+                     <LogOut size={14} /> 登出
+                  </Button>
+               </div>
+
+               <Button variant="primary" onClick={() => syncWithGoogleSheets()} disabled={isLoading} className="w-full mb-2">
+                  {isLoading ? <Loader className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+                  {isLoading ? '同步中...' : '立即同步資料'}
+               </Button>
+               <p className="text-[10px] text-center text-[#A09383]">
+                  上次同步: {new Date().toLocaleString()}
+               </p>
+            </div>
+          )}
+        </div>
+
+        {/* Data Management */}
+        <div className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0]">
+           <h3 className="font-bold text-[#8B5E3C] mb-3 flex items-center gap-2">
+            <Database size={18} /> 資料管理
+           </h3>
+           
+           <div className="space-y-3">
+              <Button variant="secondary" onClick={handleExportJson} className="w-full justify-start">
+                 <Download size={18} /> 匯出備份 (JSON)
+              </Button>
+              
+              <label className="block w-full">
+                 <div className="px-4 py-2 rounded-full font-medium transition-colors duration-200 flex items-center justify-start gap-2 bg-[#E8E1D5] text-[#5C4033] hover:bg-[#D6CDBF] cursor-pointer">
+                    <Upload size={18} /> 匯入備份 (JSON)
+                 </div>
+                 <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
+              </label>
+
+              <div className="pt-2 border-t border-[#F0EBE0]">
+                  <Button variant="danger" onClick={handleClearAllData} className="w-full justify-start bg-red-50 text-red-600 hover:bg-red-100">
+                     <Trash2 size={18} /> 清空所有資料
+                  </Button>
+              </div>
+           </div>
+        </div>
+
+        {/* About */}
+        <div className="text-center text-[#D6CDBF] text-xs pt-4">
+           <p>Beetle Manager v1.0</p>
+           <p>Designed for Beetle Lovers</p>
+        </div>
+      </div>
   );
 
   return (
