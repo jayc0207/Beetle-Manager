@@ -39,7 +39,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
+const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
