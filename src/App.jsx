@@ -32,7 +32,8 @@ import {
   Home,
   FolderOpen,
   Link as LinkIcon,
-  WifiOff
+  WifiOff,
+  Printer
 } from 'lucide-react';
 
 // ==========================================
@@ -220,6 +221,8 @@ export default function App() {
   
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false); // 新增標籤視窗狀態
+  const labelCanvasRef = useRef(null); // Canvas Ref
   
   // Share Modal State
   const [shareModalItem, setShareModalItem] = useState(null);
@@ -355,6 +358,259 @@ export default function App() {
       console.log("Google scripts failed to load", e);
     }
   }, []);
+
+  // --- Effect for Drawing Label ---
+  useEffect(() => {
+    if (showLabelModal && labelCanvasRef.current && formData) {
+      const canvas = labelCanvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width;
+      const height = canvas.height;
+
+      // Clear
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      
+      // Styles
+      ctx.strokeStyle = '#000000';
+      ctx.lineWidth = 2;
+      ctx.textBaseline = 'middle';
+
+      const padding = 20;
+      const contentW = width - padding * 2;
+      
+      // Common Header Section (Name & ID)
+      const headerH = 80;
+      
+      // Name
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 36px "Noto Sans TC", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(formData.name || '未命名', padding, padding + 30);
+      
+      // Scientific Name
+      if (formData.scientificName) {
+        ctx.font = 'italic 18px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = '#555555';
+        ctx.fillText(formData.scientificName, padding, padding + 60);
+      }
+
+      // ID (Top Right)
+      ctx.fillStyle = '#000000';
+      ctx.font = 'bold 20px monospace';
+      ctx.textAlign = 'right';
+      ctx.fillText(formData.customId || '', width - padding, padding + 30);
+
+      // --- 繪圖邏輯分支 ---
+      if (formData.type === 'larva') {
+          // === 幼蟲版面 ===
+          const infoStartY = padding + headerH;
+          const infoRowH = 35; 
+          const infoRows = 4; // 增加到 4 列，包含種親
+          const tableStartY = infoStartY + (infoRowH * infoRows) + 10;
+          const tableH = height - tableStartY - padding;
+          
+          // Info Grid (Top Part)
+          ctx.font = '16px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'left';
+          
+          // Helper for info grid
+          const drawInfoRow = (y, label1, val1, label2, val2) => {
+              const colW = contentW / 2;
+              const x1 = padding;
+              const x2 = padding + colW;
+              
+              // Draw Labels (Small)
+              ctx.font = '12px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#666666';
+              ctx.fillText(label1, x1, y);
+              ctx.fillText(label2, x2, y);
+
+              // Draw Values (Bold)
+              ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              ctx.fillText(val1 || '-', x1 + 45, y); 
+              ctx.fillText(val2 || '-', x2 + 65, y);
+              
+              // Draw Bottom Line
+              ctx.beginPath();
+              ctx.strokeStyle = '#E0E0E0'; // Light line
+              ctx.lineWidth = 1;
+              ctx.moveTo(x1, y + 15);
+              ctx.lineTo(width - padding, y + 15);
+              ctx.stroke();
+          };
+
+          const genderStr = formData.gender === 'male' ? '♂ 公' : formData.gender === 'female' ? '♀ 母' : '?';
+          const weightStr = formData.weight ? `${formData.weight}g` : '-';
+          
+          // Parent logic with unit
+          const pMale = formData.parentMale ? `${formData.parentMale}mm` : '-';
+          const pFemale = formData.parentFemale ? `${formData.parentFemale}mm` : '-';
+
+          // Row 1
+          drawInfoRow(infoStartY + 10, '產地:', formData.origin, '血統:', formData.bloodline);
+          // Row 2
+          drawInfoRow(infoStartY + 10 + infoRowH, '性別:', genderStr, '初重:', weightStr);
+          // Row 3
+          drawInfoRow(infoStartY + 10 + infoRowH * 2, '累代:', formData.generation, '孵化:', formData.date);
+          // Row 4 (New) - Parents
+          drawInfoRow(infoStartY + 10 + infoRowH * 3, '種親♂:', pMale, '種親♀:', pFemale);
+
+          // 2. Growth Record Table (Bottom Part)
+          // Columns: 日期(25%), 幼蟲期(15%), 重量(15%), 備考(45%)
+          const tableRows = 6; // 1 Header + 5 Data
+          const rowH = tableH / tableRows;
+          
+          const colX = [
+              padding, 
+              padding + contentW * 0.25, 
+              padding + contentW * 0.40, 
+              padding + contentW * 0.55
+          ];
+
+          // Draw Table Border
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(padding, tableStartY, contentW, tableH);
+
+          // Draw Rows & Text
+          for (let i = 0; i < tableRows; i++) {
+              const y = tableStartY + (i * rowH);
+              const textY = y + (rowH / 2);
+
+              // Horizontal Line
+              if (i > 0) {
+                  ctx.beginPath();
+                  ctx.lineWidth = 1;
+                  ctx.moveTo(padding, y);
+                  ctx.lineTo(width - padding, y);
+                  ctx.stroke();
+              }
+
+              // Content
+              ctx.textAlign = 'center';
+              
+              if (i === 0) {
+                  // Header
+                  ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+                  ctx.fillStyle = '#000000';
+                  ctx.fillText('日期', colX[0] + (colX[1]-colX[0])/2, textY);
+                  ctx.fillText('幼蟲期', colX[1] + (colX[2]-colX[1])/2, textY);
+                  ctx.fillText('重量', colX[2] + (colX[3]-colX[2])/2, textY);
+                  ctx.fillText('備考', colX[3] + (width-padding-colX[3])/2, textY);
+              } else {
+                  // Data
+                  const record = formData.larvaRecords && formData.larvaRecords[i - 1];
+                  if (record) {
+                      ctx.font = '14px "Noto Sans TC", sans-serif';
+                      ctx.fillStyle = '#000000';
+                      ctx.fillText(record.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
+                      ctx.fillText(record.stage || '', colX[1] + (colX[2]-colX[1])/2, textY);
+                      ctx.fillText(record.weight ? `${record.weight}g` : '', colX[2] + (colX[3]-colX[2])/2, textY);
+                      
+                      // Memo (Left align for better readability)
+                      ctx.textAlign = 'left';
+                      ctx.fillText(record.memo || '', colX[3] + 5, textY);
+                  }
+              }
+              
+              // Draw Vertical Lines
+              ctx.beginPath();
+              ctx.lineWidth = 1;
+              // Line 1
+              ctx.moveTo(colX[1], tableStartY);
+              ctx.lineTo(colX[1], tableStartY + tableH);
+              // Line 2
+              ctx.moveTo(colX[2], tableStartY);
+              ctx.lineTo(colX[2], tableStartY + tableH);
+              // Line 3
+              ctx.moveTo(colX[3], tableStartY);
+              ctx.lineTo(colX[3], tableStartY + tableH);
+              ctx.stroke();
+          }
+
+      } else {
+          // === 成蟲版面 (原有的) ===
+          const contentH = height - padding * 2;
+          const gridY = padding + headerH;
+          const gridH = contentH - headerH;
+          const rowCount = 5;
+          const rowH = gridH / rowCount;
+
+          // Draw Main Border
+          ctx.strokeRect(padding, gridY, contentW, gridH);
+
+          // Draw Horizontal Lines
+          for (let i = 1; i < rowCount; i++) {
+              ctx.beginPath();
+              ctx.moveTo(padding, gridY + i * rowH);
+              ctx.lineTo(width - padding, gridY + i * rowH);
+              ctx.stroke();
+          }
+
+          // Draw Vertical Line (Split in half)
+          ctx.beginPath();
+          ctx.moveTo(width / 2, gridY);
+          ctx.lineTo(width / 2, gridY + gridH);
+          ctx.stroke();
+
+          // --- Fill Data ---
+          const cellPadding = 10;
+          ctx.font = '16px "Noto Sans TC", sans-serif';
+          ctx.fillStyle = '#000000';
+          ctx.textAlign = 'left';
+
+          const drawLabelValue = (label, value, col, row, isFullWidth = false) => {
+              const x = padding + (col * (contentW / 2)) + cellPadding;
+              const y = gridY + (row * rowH) + (rowH / 2);
+              
+              // Draw Label (Small, gray)
+              ctx.font = '12px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#666666';
+              ctx.fillText(label, x, y - 10);
+              
+              // Draw Value (Normal, Black)
+              ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              let displayVal = value || '-';
+              
+              // Truncate if too long
+              const maxW = (isFullWidth ? contentW : contentW / 2) - cellPadding * 2;
+              if (ctx.measureText(displayVal).width > maxW) {
+                  // Simple truncation logic could be added here
+              }
+              ctx.fillText(displayVal, x, y + 10);
+          };
+
+          // Row 1: 產地 | 血統
+          drawLabelValue('產地', formData.origin, 0, 0);
+          drawLabelValue('血統', formData.bloodline, 1, 0);
+
+          // Row 2: 性別 & 尺寸 | 累代
+          const genderStr = formData.gender === 'male' ? '♂ 公' : formData.gender === 'female' ? '♀ 母' : '?';
+          const sizeStr = formData.size ? `${formData.size}mm` : '';
+          drawLabelValue('性別 / 尺寸', `${genderStr}  ${sizeStr}`, 0, 1);
+          drawLabelValue('累代', formData.generation, 1, 1);
+
+          // Row 3: 種親公 | 種親母 (Added 'mm' suffix logic)
+          const pMale = formData.parentMale ? `${formData.parentMale}mm` : '';
+          const pFemale = formData.parentFemale ? `${formData.parentFemale}mm` : '';
+          drawLabelValue('種親 ♂', pMale, 0, 2);
+          drawLabelValue('種親 ♀', pFemale, 1, 2);
+
+          // Row 4: 羽化日 | 開吃日
+          drawLabelValue('羽化日', formData.date, 0, 3);
+          drawLabelValue('開吃日', formData.startFeedingDate, 1, 3);
+
+          // Row 5: 取得日 | 死亡日
+          drawLabelValue('取得日', formData.acquisitionDate, 0, 4);
+          drawLabelValue('死亡日', formData.deathDate, 1, 4);
+      }
+
+    }
+  }, [showLabelModal, formData]);
 
   const initializeGapiClient = async () => {
     try {
@@ -1059,6 +1315,53 @@ export default function App() {
     );
   };
 
+  // --- Render Label Modal ---
+  const renderLabelModal = () => {
+    if (!showLabelModal || !editingItem) return null;
+    
+    const handleDownloadLabel = () => {
+        if (!labelCanvasRef.current) return;
+        const link = document.createElement('a');
+        link.download = `${editingItem.name}_label.png`;
+        link.href = labelCanvasRef.current.toDataURL('image/png');
+        link.click();
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-70 z-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl p-6 w-full max-w-lg flex flex-col items-center animate-in fade-in zoom-in duration-200">
+          <div className="flex justify-between w-full items-center mb-4">
+            <h3 className="font-bold text-lg text-[#4A3B32] flex items-center gap-2">
+                <Printer size={18} /> 列印標籤預覽
+            </h3>
+            <button onClick={() => setShowLabelModal(false)} className="text-gray-400">
+                <X size={20} />
+            </button>
+          </div>
+          
+          <div className="bg-gray-100 p-2 rounded-lg mb-6 overflow-auto max-w-full">
+             {/* Canvas is always rendered, but styled to fit container */}
+             <canvas 
+                ref={labelCanvasRef} 
+                width={600} 
+                height={450} // 增加高度
+                className="w-full h-auto bg-white shadow-md"
+             />
+          </div>
+
+          <div className="flex gap-4 w-full">
+             <Button variant="outline" onClick={() => setShowLabelModal(false)} className="flex-1">
+                取消
+             </Button>
+             <Button variant="primary" onClick={handleDownloadLabel} className="flex-1">
+                <Download size={18} /> 下載圖檔
+             </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderShareModal = () => {
     if (!shareModalItem) return null;
 
@@ -1275,9 +1578,17 @@ export default function App() {
         <div className="flex gap-2">
           {editingItem && (
             <>
-              <Button variant="ghost" onClick={() => setShowQR(true)}>
-                <QrCode size={20} />
-              </Button>
+              {/* 成蟲與幼蟲區顯示列印標籤，其他區域保留 QR Code */}
+              {(activeTab === 'adult' || activeTab === 'larva') ? (
+                <Button variant="ghost" onClick={() => setShowLabelModal(true)} title="列印標籤">
+                    <Printer size={20} />
+                </Button>
+              ) : (
+                <Button variant="ghost" onClick={() => setShowQR(true)}>
+                    <QrCode size={20} />
+                </Button>
+              )}
+
               <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)}>
                 <Trash2 size={20} />
               </Button>
@@ -1570,17 +1881,18 @@ export default function App() {
                     + 新增記錄
                 </button>
 
-                {/* Important Photos */}
+                {/* Important Photos - Optimized for full content */}
                 <div className="pt-4 border-t border-[#F0EBE0] mt-4">
                     <h4 className="font-bold text-[#8B5E3C] text-xs mb-3">重要階段記錄照</h4>
                     <div className="flex gap-3">
                         <div className="flex-1">
                             <label className="text-xs text-[#5C4033] mb-1 block">化蛹照</label>
-                            <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
+                            {/* Changed h-[100px] to h-64, object-cover to object-contain, added bg-black/5 */}
+                            <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-black/5 h-64 relative">
                                 {formData.pupationImage ? (
                                     <>
                                         <img src={formData.pupationImage} alt="Pupation" 
-                                            className="w-full h-full object-cover rounded-lg cursor-pointer" 
+                                            className="w-full h-full object-contain rounded-lg cursor-pointer" 
                                             onClick={() => setViewImage(formData.pupationImage)}
                                         />
                                         <button 
@@ -1600,11 +1912,12 @@ export default function App() {
                         </div>
                         <div className="flex-1">
                             <label className="text-xs text-[#5C4033] mb-1 block">羽化照</label>
-                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-[#FDFBF7] h-[100px] relative">
+                             {/* Changed h-[100px] to h-64, object-cover to object-contain, added bg-black/5 */}
+                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-black/5 h-64 relative">
                                 {formData.emergenceImage ? (
                                     <>
                                         <img src={formData.emergenceImage} alt="Emergence" 
-                                            className="w-full h-full object-cover rounded-lg cursor-pointer"
+                                            className="w-full h-full object-contain rounded-lg cursor-pointer"
                                             onClick={() => setViewImage(formData.emergenceImage)}
                                         />
                                         <button 
@@ -1822,10 +2135,23 @@ export default function App() {
           {processedData.map((item) => {
              // Logic for thumbnail display: 
              // 1. If dead and has specimen photo -> Specimen Photo (Grayscale)
-             // 2. Else -> Favorite Photo (item.image)
+             // 2. Larva logic: Emergence > Pupation > Cover
+             // 3. Else -> Favorite Photo (item.image)
              const isDead = item.type === 'adult' && item.deathDate;
              const showSpecimen = isDead && item.specimenImage;
-             const displayImage = showSpecimen ? item.specimenImage : (item.image || (item.images && item.images[0]));
+             
+             let displayImage = item.image || (item.images && item.images[0]);
+
+             if (showSpecimen) {
+                 displayImage = item.specimenImage;
+             } else if (item.type === 'larva') {
+                 // Priority: Emergence > Pupation > Default Cover
+                 if (item.emergenceImage) {
+                     displayImage = item.emergenceImage;
+                 } else if (item.pupationImage) {
+                     displayImage = item.pupationImage;
+                 }
+             }
              
              // Calculate dynamic weight for larva (Show the latest record weight, or fallback to initial weight)
              const lastWeight = item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 
@@ -1917,87 +2243,6 @@ export default function App() {
     </div>
   );
 
-  const renderSettings = () => (
-      <div className="px-4 pb-24">
-          <div className="bg-white rounded-xl shadow-sm border border-[#F0EBE0] overflow-hidden">
-              <div className="p-4 border-b border-[#F0EBE0] flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[#4A3B32] font-medium">連結 Google 帳戶</span>
-                    <span className="text-xs text-[#A09383]">
-                        {isSignedIn ? `已登入: ${userProfile?.email || 'User'}` : '未連結'}
-                    </span>
-                  </div>
-                  
-                  {isSignedIn ? (
-                      <Button variant="outline" onClick={handleSignOutClick} className="!px-3 !py-1 text-xs">
-                          <LogOut size={14} /> 登出
-                      </Button>
-                  ) : (
-                      <Button variant="primary" onClick={handleAuthClick} className="!px-3 !py-1 text-xs">
-                          <Cloud size={14} /> 登入
-                      </Button>
-                  )}
-              </div>
-              
-              <div className="p-4 border-b border-[#F0EBE0] flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-[#4A3B32] font-medium">資料庫狀態</span>
-                    <span className="text-xs text-[#A09383]">
-                        {spreadsheetId ? '已連接雲端試算表' : '僅使用本地儲存'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {spreadsheetId && isSignedIn && (
-                        <Button variant="ghost" onClick={() => syncWithGoogleSheets()} className="!p-1" disabled={isLoading}>
-                             <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} />
-                        </Button>
-                    )}
-                    {isLoading && <Loader className="animate-spin text-[#8B5E3C]" size={18} />}
-                  </div>
-              </div>
-
-              {/* Data Management Section */}
-              <div className="p-4 border-b border-[#F0EBE0] space-y-3">
-                  <h4 className="text-xs font-bold text-[#8B5E3C] flex items-center gap-2">
-                      <Database size={14} /> 資料管理
-                  </h4>
-                  
-                  <div className="flex gap-2">
-                      <button 
-                        onClick={handleExportJson}
-                        className="flex-1 bg-[#F5F1E8] text-[#5C4033] py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-[#E8DCC8]"
-                      >
-                          <Download size={14} /> 匯出備份 (JSON)
-                      </button>
-                      <label className="flex-1 bg-[#F5F1E8] text-[#5C4033] py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-[#E8DCC8] cursor-pointer">
-                          <Upload size={14} /> 匯入還原
-                          <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
-                      </label>
-                  </div>
-                  
-                  <button 
-                    onClick={handleClearAllData}
-                    className="w-full border border-red-200 text-red-500 py-2 px-3 rounded-lg text-xs font-medium flex items-center justify-center gap-1 hover:bg-red-50"
-                  >
-                      <Trash2 size={14} /> 清除所有資料 (慎用)
-                  </button>
-              </div>
-
-              <div className="p-4 flex items-center justify-between">
-                  <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v2.0.3 (Offline Mode)</span>
-              </div>
-          </div>
-          
-          <div className="mt-8 p-4 bg-yellow-50 rounded-lg text-xs text-[#8B5E3C] border border-yellow-100">
-            <h4 className="font-bold mb-2 flex items-center gap-1"><FolderOpen size={14}/> 圖片權限設定說明</h4>
-            <p>1. 系統已自動在您的 Google Drive 建立 <b>{APP_FOLDER_NAME}</b> 資料夾。</p>
-            <p className="mt-1">2. 為了讓分享連結能正常顯示圖片，請前往 Google Drive 找到該資料夾。</p>
-            <p className="mt-1">3. 將資料夾權限設定為 <b>「知道連結的任何人」</b> &rarr; <b>「檢視者」</b>。</p>
-          </div>
-      </div>
-  );
-
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans text-[#4A3B32]">
       {view === 'shared' ? (
@@ -2014,6 +2259,7 @@ export default function App() {
 
             {renderBottomNav()}
             {renderQRCodeModal()}
+            {renderLabelModal()} {/* 新增標籤預覽視窗 */}
             {renderShareModal()}
           </>
       )}
