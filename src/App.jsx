@@ -31,7 +31,8 @@ import {
   Copy,
   Home,
   FolderOpen,
-  Link as LinkIcon
+  Link as LinkIcon,
+  WifiOff
 } from 'lucide-react';
 
 // ==========================================
@@ -747,10 +748,8 @@ export default function App() {
   };
 
   const handleAddItem = () => {
-    if (!isSignedIn) {
-        alert("請先至「設定」頁面登入 Google 帳戶，方可新增資料。");
-        return;
-    }
+    // 移除強制登入檢查，允許離線新增
+    // if (!isSignedIn) { ... }
 
     setFormData({
       type: activeTab === 'breeding' ? 'breeding' : activeTab === 'larva' ? 'larva' : 'adult',
@@ -787,10 +786,8 @@ export default function App() {
   };
 
   const handleEditItem = (item) => {
-    if (!isSignedIn) {
-        alert("請先至「設定」頁面登入 Google 帳戶，方可編輯資料。");
-        return;
-    }
+    // 移除強制登入檢查，允許離線編輯
+    // if (!isSignedIn) { ... }
 
     // Migration: if item has 'image' but no 'images', put it in array
     let initImages = item.images || [];
@@ -904,7 +901,7 @@ export default function App() {
   const addLarvaRecord = () => {
     setFormData(prev => ({
         ...prev,
-        larvaRecords: [...(prev.larvaRecords || []), { date: new Date().toISOString().split('T')[0], stage: 'L1', weight: '' }]
+        larvaRecords: [...(prev.larvaRecords || []), { date: new Date().toISOString().split('T')[0], stage: 'L1', weight: '', memo: '' }]
     }));
   };
   const removeLarvaRecord = (index) => setFormData(prev => ({ ...prev, larvaRecords: prev.larvaRecords.filter((_, i) => i !== index) }));
@@ -1138,14 +1135,11 @@ export default function App() {
                   <p className="text-sm text-[#5C4033] mb-6 max-w-xs">{visitorError}</p>
                   <button 
                     onClick={() => {
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                        setSharedItem(null);
-                        setView('list');
                         window.location.reload();
                     }}
-                    className="bg-[#8B5E3C] text-white px-6 py-2 rounded-full font-medium shadow-md"
+                    className="bg-[#8B5E3C] text-white px-6 py-2 rounded-full font-medium shadow-md flex items-center gap-2 mx-auto"
                   >
-                      返回首頁
+                      <RefreshCw size={16} /> 重新載入
                   </button>
               </div>
           );
@@ -1295,6 +1289,14 @@ export default function App() {
           </Button>
         </div>
       </div>
+      
+      {/* Offline Warning Banner */}
+      {!isSignedIn && (
+          <div className="bg-orange-50 border border-orange-200 text-orange-800 px-4 py-2 rounded-lg mb-4 text-xs flex items-center gap-2">
+              <WifiOff size={14} />
+              <span>離線模式：資料僅儲存於本機，不會同步至雲端。</span>
+          </div>
+      )}
 
       {/* Status Bar for Uploads */}
       {statusMsg && (
@@ -1370,7 +1372,7 @@ export default function App() {
             )}
              {formData.type === 'larva' && (
               <div className="flex-1">
-                 <InputGroup label="目前體重">
+                 <InputGroup label="初始體重">
                     <TextInput 
                         value={formData.weight} 
                         onChange={v => setFormData({...formData, weight: v})} 
@@ -1511,26 +1513,28 @@ export default function App() {
             
             <div className="space-y-2">
                 {/* Header */}
-                <div className="flex text-xs text-[#A09383] px-1">
-                    <div className="flex-1">日期</div>
-                    <div className="flex-1 text-center">幼蟲期</div>
-                    <div className="flex-1 text-right">重量 (g)</div>
+                <div className="flex text-xs text-[#A09383] px-1 gap-1">
+                    <div className="w-28">日期</div>
+                    <div className="w-14 text-center">幼蟲期</div>
+                    <div className="w-14 text-right">重量(g)</div>
+                    <div className="w-6"></div> {/* Spacer */}
+                    <div className="flex-1">備考</div>
                     <div className="w-6"></div>
                 </div>
 
                 {/* Rows */}
                 {formData.larvaRecords && formData.larvaRecords.map((record, index) => (
-                    <div key={index} className="flex items-center gap-2 border-b border-[#F0EBE0] pb-2 last:border-0">
+                    <div key={index} className="flex items-center gap-1 border-b border-[#F0EBE0] pb-2 last:border-0">
                         <input 
                             type="date" 
                             value={record.date}
                             onChange={(e) => updateLarvaRecord(index, 'date', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0"
+                            className="w-28 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0"
                         />
                         <select
                             value={record.stage}
                             onChange={(e) => updateLarvaRecord(index, 'stage', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center"
+                            className="w-14 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center"
                         >
                             <option value="L1">L1</option>
                             <option value="L2">L2</option>
@@ -1543,7 +1547,15 @@ export default function App() {
                             placeholder="0.0"
                             value={record.weight}
                             onChange={(e) => updateLarvaRecord(index, 'weight', e.target.value)}
-                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-right min-w-0"
+                            className="w-14 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-right min-w-0"
+                        />
+                        <div className="w-6"></div> {/* Spacer */}
+                        <input 
+                            type="text" 
+                            placeholder="..."
+                            value={record.memo || ''}
+                            onChange={(e) => updateLarvaRecord(index, 'memo', e.target.value)}
+                            className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0 text-gray-500"
                         />
                         <button onClick={() => removeLarvaRecord(index)} className="w-6 text-red-400">
                             <X size={14} />
@@ -1814,6 +1826,16 @@ export default function App() {
              const isDead = item.type === 'adult' && item.deathDate;
              const showSpecimen = isDead && item.specimenImage;
              const displayImage = showSpecimen ? item.specimenImage : (item.image || (item.images && item.images[0]));
+             
+             // Calculate dynamic weight for larva (Show the latest record weight, or fallback to initial weight)
+             const lastWeight = item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 
+                ? item.larvaRecords[item.larvaRecords.length - 1].weight 
+                : item.weight;
+
+             // Calculate last record date for larva
+             const lastRecordDate = item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0
+                ? item.larvaRecords[item.larvaRecords.length - 1].date
+                : null;
 
              return (
                 <div 
@@ -1846,10 +1868,15 @@ export default function App() {
                     )}
                     <p className="text-xs text-[#A09383]">{item.origin || '未知產地'}</p>
                     <div className="mt-2 flex items-center gap-3 text-sm">
-                    {item.gender !== 'unknown' && (
-                        <span className={`flex items-center gap-1 ${item.gender === 'male' ? 'text-blue-500' : 'text-red-500'}`}>
-                        {item.gender === 'male' ? '♂' : '♀'} 
-                        {item.type === 'adult' ? `${item.size}mm` : `${item.weight}g`}
+                    {/* Modified Logic Here: Show if gender is known OR type is larva (regardless of gender) */}
+                    {(item.gender !== 'unknown' || item.type === 'larva') && (
+                        <span className={`flex items-center gap-1 ${
+                            item.gender === 'male' ? 'text-blue-500' : 
+                            item.gender === 'female' ? 'text-red-500' : 
+                            'text-[#8B5E3C]' // Neutral color for unknown larva
+                        }`}>
+                        {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} 
+                        {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
                         </span>
                     )}
                     {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
@@ -1860,6 +1887,7 @@ export default function App() {
                     <span className="text-xs text-[#A09383] ml-auto">
                         {item.date}
                         {item.type === 'adult' && item.deathDate ? ` ~ ${item.deathDate}` : ''}
+                        {item.type === 'larva' && lastRecordDate ? ` ~ ${lastRecordDate}` : ''}
                     </span>
                     </div>
                 </div>
@@ -1957,7 +1985,7 @@ export default function App() {
 
               <div className="p-4 flex items-center justify-between">
                   <span className="text-[#4A3B32] font-medium">關於 App</span>
-                  <span className="text-xs text-[#A09383]">v2.0.3 (Fix Form Render)</span>
+                  <span className="text-xs text-[#A09383]">v2.0.3 (Offline Mode)</span>
               </div>
           </div>
           
