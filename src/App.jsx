@@ -276,6 +276,7 @@ export default function App() {
     image: null,
     status: 'active',
     larvaRecords: [],
+    breedingRecords: [], // 新增：產卵紀錄
     expectedHatchDate: '',
     enableEmailNotify: false,
     id: ''
@@ -401,6 +402,35 @@ export default function App() {
       ctx.textAlign = 'right';
       ctx.fillText(formData.customId || '', width - padding, padding + 30);
 
+      // Helper for info grid
+      const drawInfoRow = (y, label1, val1, label2, val2) => {
+        const colW = contentW / 2;
+        const x1 = padding;
+        const x2 = padding + colW;
+        
+        // Draw Labels (Small)
+        ctx.font = '12px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = '#666666';
+        ctx.textAlign = 'left';
+        ctx.fillText(label1, x1, y);
+        ctx.fillText(label2, x2, y);
+
+        // Draw Values (Bold) - Modified offsets to prevent overlap
+        // 增加位移量 (從 45/65 改為 100/100) 以容納較長的標題 (如：預計孵化、建立日期)
+        ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = '#000000';
+        ctx.fillText(val1 || '-', x1 + 100, y); 
+        ctx.fillText(val2 || '-', x2 + 100, y);
+        
+        // Draw Bottom Line
+        ctx.beginPath();
+        ctx.strokeStyle = '#E0E0E0'; // Light line
+        ctx.lineWidth = 1;
+        ctx.moveTo(x1, y + 15);
+        ctx.lineTo(width - padding, y + 15);
+        ctx.stroke();
+    };
+
       // --- 繪圖邏輯分支 ---
       if (formData.type === 'larva') {
           // === 幼蟲版面 ===
@@ -414,33 +444,6 @@ export default function App() {
           ctx.font = '16px "Noto Sans TC", sans-serif';
           ctx.fillStyle = '#000000';
           ctx.textAlign = 'left';
-          
-          // Helper for info grid
-          const drawInfoRow = (y, label1, val1, label2, val2) => {
-              const colW = contentW / 2;
-              const x1 = padding;
-              const x2 = padding + colW;
-              
-              // Draw Labels (Small)
-              ctx.font = '12px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#666666';
-              ctx.fillText(label1, x1, y);
-              ctx.fillText(label2, x2, y);
-
-              // Draw Values (Bold)
-              ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#000000';
-              ctx.fillText(val1 || '-', x1 + 45, y); 
-              ctx.fillText(val2 || '-', x2 + 65, y);
-              
-              // Draw Bottom Line
-              ctx.beginPath();
-              ctx.strokeStyle = '#E0E0E0'; // Light line
-              ctx.lineWidth = 1;
-              ctx.moveTo(x1, y + 15);
-              ctx.lineTo(width - padding, y + 15);
-              ctx.stroke();
-          };
 
           const genderStr = formData.gender === 'male' ? '♂ 公' : formData.gender === 'female' ? '♀ 母' : '?';
           const weightStr = formData.weight ? `${formData.weight}g` : '-';
@@ -530,6 +533,93 @@ export default function App() {
               ctx.lineTo(colX[3], tableStartY + tableH);
               ctx.stroke();
           }
+
+      } else if (formData.type === 'breeding') {
+          // === 產卵組版面 ===
+          const infoStartY = padding + headerH;
+          const infoRowH = 35; 
+          const infoRowsCount = 4;
+          
+          // Parent logic with unit
+          const pMale = formData.parentMale ? `${formData.parentMale}mm` : '-';
+          const pFemale = formData.parentFemale ? `${formData.parentFemale}mm` : '-';
+
+          // Info Rows:
+          drawInfoRow(infoStartY + 10, '產地:', formData.origin, '血統:', formData.bloodline);
+          drawInfoRow(infoStartY + 10 + infoRowH, '累代:', formData.generation, '建立日期:', formData.date);
+          drawInfoRow(infoStartY + 10 + infoRowH * 2, '種親♂:', pMale, '種親♀:', pFemale);
+          drawInfoRow(infoStartY + 10 + infoRowH * 3, '預計孵化:', formData.expectedHatchDate, '', '');
+
+          // Breeding Record Table
+          const tableStartY = infoStartY + (infoRowH * infoRowsCount) + 20;
+          const tableH = height - tableStartY - padding;
+          const tableRows = 4; // 1 Header + 3 Data (Fixed)
+          const rowH = tableH / tableRows;
+
+          // Columns: 採收日(25%), 卵(10%), 蟲(10%), 備考(55%)
+          const colX = [
+              padding, 
+              padding + contentW * 0.25, 
+              padding + contentW * 0.35, 
+              padding + contentW * 0.45
+          ];
+
+          // Draw Border
+          ctx.strokeStyle = '#000000';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(padding, tableStartY, contentW, tableH);
+
+          // Draw Rows
+           for (let i = 0; i < tableRows; i++) {
+              const y = tableStartY + (i * rowH);
+              const textY = y + (rowH / 2);
+
+              if (i > 0) {
+                  ctx.beginPath();
+                  ctx.lineWidth = 1;
+                  ctx.moveTo(padding, y);
+                  ctx.lineTo(width - padding, y);
+                  ctx.stroke();
+              }
+              
+              ctx.textAlign = 'center';
+              ctx.fillStyle = '#000000';
+
+              if (i === 0) {
+                  // Header
+                  ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+                  ctx.fillText('採收日', colX[0] + (colX[1]-colX[0])/2, textY);
+                  ctx.fillText('卵', colX[1] + (colX[2]-colX[1])/2, textY);
+                  ctx.fillText('蟲', colX[2] + (colX[3]-colX[2])/2, textY);
+                  ctx.fillText('備考', colX[3] + (width-padding-colX[3])/2, textY);
+              } else {
+                  // Data (Fixed 3 rows, map to index 0, 1, 2)
+                  const record = formData.breedingRecords && formData.breedingRecords[i - 1];
+                  const rDate = record ? record.date : '';
+                  const rEggs = record ? record.eggs : '';
+                  const rLarvae = record ? record.larvae : '';
+                  const rMemo = record ? record.memo : '';
+
+                  ctx.font = '14px "Noto Sans TC", sans-serif';
+                  ctx.fillText(rDate, colX[0] + (colX[1]-colX[0])/2, textY);
+                  ctx.fillText(rEggs, colX[1] + (colX[2]-colX[1])/2, textY);
+                  ctx.fillText(rLarvae, colX[2] + (colX[3]-colX[2])/2, textY);
+                  
+                  ctx.textAlign = 'left';
+                  ctx.fillText(rMemo || '', colX[3] + 5, textY);
+              }
+              
+              // Vertical Lines
+              ctx.beginPath();
+              ctx.lineWidth = 1;
+              ctx.moveTo(colX[1], tableStartY);
+              ctx.lineTo(colX[1], tableStartY + tableH);
+              ctx.moveTo(colX[2], tableStartY);
+              ctx.lineTo(colX[2], tableStartY + tableH);
+              ctx.moveTo(colX[3], tableStartY);
+              ctx.lineTo(colX[3], tableStartY + tableH);
+              ctx.stroke();
+           }
 
       } else {
           // === 成蟲版面 (原有的) ===
@@ -1033,6 +1123,7 @@ export default function App() {
       image: null,
       status: 'active',
       larvaRecords: [],
+      breedingRecords: [], // Init empty
       expectedHatchDate: '',
       enableEmailNotify: false,
       id: Date.now().toString()
@@ -1060,6 +1151,7 @@ export default function App() {
         images: initImages,
         image: item.image || (initImages.length > 0 ? initImages[0] : null), // Ensure cover image is set
         larvaRecords: item.larvaRecords || [],
+        breedingRecords: item.breedingRecords || [], // Migration
         expectedHatchDate: item.expectedHatchDate || '',
         enableEmailNotify: item.enableEmailNotify || false
     });
@@ -1162,6 +1254,16 @@ export default function App() {
   };
   const removeLarvaRecord = (index) => setFormData(prev => ({ ...prev, larvaRecords: prev.larvaRecords.filter((_, i) => i !== index) }));
   const updateLarvaRecord = (index, field, value) => setFormData(prev => ({ ...prev, larvaRecords: prev.larvaRecords.map((item, i) => i === index ? { ...item, [field]: value } : item) }));
+
+  // --- Breeding Record Helpers ---
+  const addBreedingRecord = () => {
+      setFormData(prev => ({
+          ...prev,
+          breedingRecords: [...(prev.breedingRecords || []), { date: new Date().toISOString().split('T')[0], eggs: '', larvae: '', memo: '' }]
+      }));
+  };
+  const removeBreedingRecord = (index) => setFormData(prev => ({ ...prev, breedingRecords: prev.breedingRecords.filter((_, i) => i !== index) }));
+  const updateBreedingRecord = (index, field, value) => setFormData(prev => ({ ...prev, breedingRecords: prev.breedingRecords.map((item, i) => i === index ? { ...item, [field]: value } : item) }));
 
   // --- Filter and Sort ---
   
@@ -1578,16 +1680,10 @@ export default function App() {
         <div className="flex gap-2">
           {editingItem && (
             <>
-              {/* 成蟲與幼蟲區顯示列印標籤，其他區域保留 QR Code */}
-              {(activeTab === 'adult' || activeTab === 'larva') ? (
-                <Button variant="ghost" onClick={() => setShowLabelModal(true)} title="列印標籤">
-                    <Printer size={20} />
-                </Button>
-              ) : (
-                <Button variant="ghost" onClick={() => setShowQR(true)}>
-                    <QrCode size={20} />
-                </Button>
-              )}
+              {/* 改為所有類別都顯示列印標籤 (產卵組取消 QR Code) */}
+              <Button variant="ghost" onClick={() => setShowLabelModal(true)} title="列印標籤">
+                  <Printer size={20} />
+              </Button>
 
               <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)}>
                 <Trash2 size={20} />
@@ -1786,6 +1882,68 @@ export default function App() {
             </h3>
             
             <div className="space-y-4">
+               
+               {/* 新增：產卵紀錄列表 */}
+               <div className="space-y-2 mb-4">
+                    {/* Header */}
+                    <div className="flex text-xs text-[#A09383] px-1 gap-1">
+                        <div className="w-28">採收日期</div>
+                        {/* 加寬欄位 w-12 -> w-24 */}
+                        <div className="w-24 text-center">卵</div>
+                        <div className="w-24 text-center">蟲</div>
+                        {/* 增加間距 */}
+                        <div className="w-4"></div>
+                        <div className="flex-1">備考</div>
+                        <div className="w-6"></div>
+                    </div>
+
+                    {/* Rows */}
+                    {formData.breedingRecords && formData.breedingRecords.map((record, index) => (
+                        <div key={index} className="flex items-center gap-1 border-b border-[#F0EBE0] pb-2 last:border-0">
+                            <input
+                                type="date"
+                                value={record.date}
+                                onChange={(e) => updateBreedingRecord(index, 'date', e.target.value)}
+                                className="w-28 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0"
+                            />
+                            {/* 加寬欄位 w-12 -> w-24 */}
+                            <input
+                                type="number"
+                                placeholder="0"
+                                value={record.eggs}
+                                onChange={(e) => updateBreedingRecord(index, 'eggs', e.target.value)}
+                                className="w-24 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center min-w-0"
+                            />
+                            <input
+                                type="number"
+                                placeholder="0"
+                                value={record.larvae}
+                                onChange={(e) => updateBreedingRecord(index, 'larvae', e.target.value)}
+                                className="w-24 bg-transparent text-xs text-[#4A3B32] focus:outline-none text-center min-w-0"
+                            />
+                            {/* 增加間距 */}
+                            <div className="w-4"></div>
+                            <input
+                                type="text"
+                                placeholder="..."
+                                value={record.memo || ''}
+                                onChange={(e) => updateBreedingRecord(index, 'memo', e.target.value)}
+                                className="flex-1 bg-transparent text-xs text-[#4A3B32] focus:outline-none min-w-0 text-gray-500"
+                            />
+                            <button onClick={() => removeBreedingRecord(index)} className="w-6 text-red-400">
+                                <X size={14} />
+                            </button>
+                        </div>
+                    ))}
+
+                    <button
+                        onClick={addBreedingRecord}
+                        className="w-full py-2 border border-dashed border-[#D6CDBF] text-[#8B5E3C] text-xs rounded-lg mt-2 hover:bg-[#FDFBF7]"
+                    >
+                        + 新增採收記錄
+                    </button>
+                </div>
+
                <InputGroup label="預計孵化日">
                  <input
                     type="date"
@@ -2241,84 +2399,6 @@ export default function App() {
         <Plus size={28} />
       </button>
     </div>
-  );
-
-  const renderSettings = () => (
-      <div className="px-4 pb-24 space-y-4">
-        {/* Google Account Section */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0]">
-          <h3 className="font-bold text-[#8B5E3C] mb-3 flex items-center gap-2">
-            <Cloud size={18} /> 雲端同步
-          </h3>
-          
-          {!isSignedIn ? (
-            <div className="text-center">
-               <p className="text-sm text-gray-500 mb-4">登入 Google 帳號以備份資料並在多裝置間同步。</p>
-               <Button variant="google" onClick={handleAuthClick} className="w-full justify-center">
-                 <img src="https://www.svgrepo.com/show/475656/google-color.svg" className="w-5 h-5" alt="G" />
-                 連結 Google 帳號
-               </Button>
-            </div>
-          ) : (
-            <div>
-               <div className="flex items-center justify-between mb-4 bg-green-50 p-3 rounded-lg border border-green-100">
-                  <div className="flex items-center gap-2">
-                     <div className="w-8 h-8 bg-green-200 rounded-full flex items-center justify-center text-green-700 font-bold">
-                        {userProfile?.email?.charAt(0).toUpperCase() || 'G'}
-                     </div>
-                     <div className="flex flex-col">
-                        <span className="text-sm font-bold text-green-800">已連線</span>
-                        <span className="text-[10px] text-green-600 truncate max-w-[150px]">{userProfile?.email || 'Google User'}</span>
-                     </div>
-                  </div>
-                  <Button variant="outline" onClick={handleSignOutClick} className="!px-3 !py-1 text-xs h-8">
-                     <LogOut size={14} /> 登出
-                  </Button>
-               </div>
-
-               <Button variant="primary" onClick={() => syncWithGoogleSheets()} disabled={isLoading} className="w-full mb-2">
-                  {isLoading ? <Loader className="animate-spin" size={18} /> : <RefreshCw size={18} />}
-                  {isLoading ? '同步中...' : '立即同步資料'}
-               </Button>
-               <p className="text-[10px] text-center text-[#A09383]">
-                  上次同步: {new Date().toLocaleString()}
-               </p>
-            </div>
-          )}
-        </div>
-
-        {/* Data Management */}
-        <div className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0]">
-           <h3 className="font-bold text-[#8B5E3C] mb-3 flex items-center gap-2">
-            <Database size={18} /> 資料管理
-           </h3>
-           
-           <div className="space-y-3">
-              <Button variant="secondary" onClick={handleExportJson} className="w-full justify-start">
-                 <Download size={18} /> 匯出備份 (JSON)
-              </Button>
-              
-              <label className="block w-full">
-                 <div className="px-4 py-2 rounded-full font-medium transition-colors duration-200 flex items-center justify-start gap-2 bg-[#E8E1D5] text-[#5C4033] hover:bg-[#D6CDBF] cursor-pointer">
-                    <Upload size={18} /> 匯入備份 (JSON)
-                 </div>
-                 <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
-              </label>
-
-              <div className="pt-2 border-t border-[#F0EBE0]">
-                  <Button variant="danger" onClick={handleClearAllData} className="w-full justify-start bg-red-50 text-red-600 hover:bg-red-100">
-                     <Trash2 size={18} /> 清空所有資料
-                  </Button>
-              </div>
-           </div>
-        </div>
-
-        {/* About */}
-        <div className="text-center text-[#D6CDBF] text-xs pt-4">
-           <p>Beetle Manager v1.0</p>
-           <p>Designed for Beetle Lovers</p>
-        </div>
-      </div>
   );
 
   return (
