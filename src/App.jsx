@@ -2401,6 +2401,86 @@ export default function App() {
     </div>
   );
 
+  const renderSettings = () => (
+    <div className="px-5 pb-24">
+      <div className="mt-6 mb-6">
+        <h2 className="text-2xl font-bold text-[#4A3B32] mb-2">設定</h2>
+        <p className="text-sm text-[#A09383]">管理您的資料與帳號連結</p>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden mb-4">
+        <div className="p-4 border-b border-[#F0EBE0] bg-[#FDFBF7]">
+           <h3 className="font-bold text-[#8B5E3C] flex items-center gap-2">
+              <Cloud size={18} /> 雲端同步 (Google Sheets)
+           </h3>
+        </div>
+        
+        <div className="p-4">
+           {!isSignedIn ? (
+               <div className="text-center py-4">
+                   <p className="text-sm text-[#5C4033] mb-4">登入 Google 帳號以啟用雲端備份與多裝置同步功能。</p>
+                   <Button variant="google" onClick={handleAuthClick} className="w-full justify-center">
+                       <img src="https://www.google.com/favicon.ico" alt="G" className="w-4 h-4" />
+                       連結 Google 帳號
+                   </Button>
+               </div>
+           ) : (
+               <div>
+                   <div className="flex items-center gap-3 mb-4 bg-green-50 p-3 rounded-lg border border-green-100">
+                       <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold">
+                           {userProfile?.email?.[0]?.toUpperCase() || 'G'}
+                       </div>
+                       <div className="flex-1 overflow-hidden">
+                           <p className="text-sm font-bold text-green-800 truncate">{userProfile?.email || '已登入 Google'}</p>
+                           <p className="text-[10px] text-green-600">已連結至 {SPREADSHEET_NAME}</p>
+                       </div>
+                   </div>
+
+                   <div className="flex flex-col gap-2">
+                       <Button variant="primary" onClick={syncWithGoogleSheets} disabled={isLoading} className="w-full justify-center">
+                           {isLoading ? <Loader className="animate-spin" size={16}/> : <RefreshCw size={16}/>}
+                           立即手動同步
+                       </Button>
+                       <Button variant="outline" onClick={handleSignOutClick} className="w-full justify-center">
+                           <LogOut size={16}/> 登出
+                       </Button>
+                   </div>
+               </div>
+           )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden mb-4">
+        <div className="p-4 border-b border-[#F0EBE0] bg-[#FDFBF7]">
+           <h3 className="font-bold text-[#8B5E3C] flex items-center gap-2">
+              <Database size={18} /> 資料管理 (JSON)
+           </h3>
+        </div>
+        <div className="p-4 flex flex-col gap-3">
+            <Button variant="secondary" onClick={handleExportJson} className="w-full justify-center">
+                <Download size={16}/> 匯出備份 (JSON)
+            </Button>
+            
+            <label className="flex items-center justify-center px-4 py-2 rounded-full font-medium transition-colors duration-200 gap-2 border border-[#8B5E3C] text-[#8B5E3C] hover:bg-[#FDFBF7] cursor-pointer">
+                <Upload size={16}/> 匯入備份 (JSON)
+                <input type="file" accept=".json" onChange={handleImportJson} className="hidden" />
+            </label>
+
+            <div className="h-px bg-[#F0EBE0] my-2"></div>
+
+            <Button variant="danger" onClick={handleClearAllData} className="w-full justify-center">
+                <Trash2 size={16}/> 清空所有資料
+            </Button>
+        </div>
+      </div>
+
+      <div className="text-center text-[#D6CDBF] text-xs py-4">
+          <p>Beetle Manager v2.1</p>
+          <p>Designed for Beetle Lovers</p>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans text-[#4A3B32]">
       {view === 'shared' ? (
