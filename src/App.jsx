@@ -515,7 +515,7 @@ export default function App() {
                   const recordLeft = formData.larvaRecords && formData.larvaRecords[leftIdx];
                   const recordRight = formData.larvaRecords && formData.larvaRecords[rightIdx];
 
-                  ctx.font = '14px "Noto Sans TC", sans-serif';
+                  ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
                   
                   if (recordLeft) {
                       ctx.fillText(recordLeft.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
@@ -611,7 +611,7 @@ export default function App() {
                   const recordLeft = formData.breedingRecords && formData.breedingRecords[leftIdx];
                   const recordRight = formData.breedingRecords && formData.breedingRecords[rightIdx];
 
-                  ctx.font = '14px "Noto Sans TC", sans-serif';
+                  ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
                   
                   if (recordLeft) {
                       ctx.fillText(recordLeft.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
