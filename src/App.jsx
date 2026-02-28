@@ -276,7 +276,7 @@ export default function App() {
     image: null,
     status: 'active',
     larvaRecords: [],
-    breedingRecords: [], // 新增：產卵紀錄
+    breedingRecords: [], 
     expectedHatchDate: '',
     enableEmailNotify: false,
     id: ''
@@ -415,8 +415,7 @@ export default function App() {
         ctx.fillText(label1, x1, y);
         ctx.fillText(label2, x2, y);
 
-        // Draw Values (Bold) - Modified offsets to prevent overlap
-        // 增加位移量 (從 45/65 改為 100/100) 以容納較長的標題 (如：預計孵化、建立日期)
+        // Draw Values (Bold) - Offset to prevent overlap
         ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
         ctx.fillStyle = '#000000';
         ctx.fillText(val1 || '-', x1 + 100, y); 
@@ -436,7 +435,7 @@ export default function App() {
           // === 幼蟲版面 ===
           const infoStartY = padding + headerH;
           const infoRowH = 35; 
-          const infoRows = 4; // 增加到 4 列，包含種親
+          const infoRows = 4; // 包含種親，共 4 列
           const tableStartY = infoStartY + (infoRowH * infoRows) + 10;
           const tableH = height - tableStartY - padding;
           
@@ -461,16 +460,18 @@ export default function App() {
           // Row 4 (New) - Parents
           drawInfoRow(infoStartY + 10 + infoRowH * 3, '種親♂:', pMale, '種親♀:', pFemale);
 
-          // 2. Growth Record Table (Bottom Part)
-          // Columns: 日期(25%), 幼蟲期(15%), 重量(15%), 備考(45%)
+          // 2. Growth Record Table (Bottom Part) - 10 Records (2 columns x 5 data rows)
           const tableRows = 6; // 1 Header + 5 Data
           const rowH = tableH / tableRows;
           
           const colX = [
               padding, 
-              padding + contentW * 0.25, 
-              padding + contentW * 0.40, 
-              padding + contentW * 0.55
+              padding + 110, 
+              padding + 195, 
+              padding + 280, 
+              padding + 390, 
+              padding + 475, 
+              width - padding
           ];
 
           // Draw Table Border
@@ -494,45 +495,50 @@ export default function App() {
 
               // Content
               ctx.textAlign = 'center';
+              ctx.fillStyle = '#000000';
               
               if (i === 0) {
                   // Header
                   ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
-                  ctx.fillStyle = '#000000';
+                  // Left
                   ctx.fillText('日期', colX[0] + (colX[1]-colX[0])/2, textY);
                   ctx.fillText('幼蟲期', colX[1] + (colX[2]-colX[1])/2, textY);
-                  ctx.fillText('重量', colX[2] + (colX[3]-colX[2])/2, textY);
-                  ctx.fillText('備考', colX[3] + (width-padding-colX[3])/2, textY);
+                  ctx.fillText('重量(g)', colX[2] + (colX[3]-colX[2])/2, textY);
+                  // Right
+                  ctx.fillText('日期', colX[3] + (colX[4]-colX[3])/2, textY);
+                  ctx.fillText('幼蟲期', colX[4] + (colX[5]-colX[4])/2, textY);
+                  ctx.fillText('重量(g)', colX[5] + (colX[6]-colX[5])/2, textY);
               } else {
                   // Data
-                  const record = formData.larvaRecords && formData.larvaRecords[i - 1];
-                  if (record) {
-                      ctx.font = '14px "Noto Sans TC", sans-serif';
-                      ctx.fillStyle = '#000000';
-                      ctx.fillText(record.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
-                      ctx.fillText(record.stage || '', colX[1] + (colX[2]-colX[1])/2, textY);
-                      ctx.fillText(record.weight ? `${record.weight}g` : '', colX[2] + (colX[3]-colX[2])/2, textY);
-                      
-                      // Memo (Left align for better readability)
-                      ctx.textAlign = 'left';
-                      ctx.fillText(record.memo || '', colX[3] + 5, textY);
+                  const leftIdx = i - 1;
+                  const rightIdx = i - 1 + 5;
+                  const recordLeft = formData.larvaRecords && formData.larvaRecords[leftIdx];
+                  const recordRight = formData.larvaRecords && formData.larvaRecords[rightIdx];
+
+                  ctx.font = '14px "Noto Sans TC", sans-serif';
+                  
+                  if (recordLeft) {
+                      ctx.fillText(recordLeft.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
+                      ctx.fillText(recordLeft.stage || '', colX[1] + (colX[2]-colX[1])/2, textY);
+                      ctx.fillText(recordLeft.weight ? `${recordLeft.weight}` : '', colX[2] + (colX[3]-colX[2])/2, textY);
+                  }
+                  
+                  if (recordRight) {
+                      ctx.fillText(recordRight.date || '', colX[3] + (colX[4]-colX[3])/2, textY);
+                      ctx.fillText(recordRight.stage || '', colX[4] + (colX[5]-colX[4])/2, textY);
+                      ctx.fillText(recordRight.weight ? `${recordRight.weight}` : '', colX[5] + (colX[6]-colX[5])/2, textY);
                   }
               }
-              
-              // Draw Vertical Lines
-              ctx.beginPath();
-              ctx.lineWidth = 1;
-              // Line 1
-              ctx.moveTo(colX[1], tableStartY);
-              ctx.lineTo(colX[1], tableStartY + tableH);
-              // Line 2
-              ctx.moveTo(colX[2], tableStartY);
-              ctx.lineTo(colX[2], tableStartY + tableH);
-              // Line 3
-              ctx.moveTo(colX[3], tableStartY);
-              ctx.lineTo(colX[3], tableStartY + tableH);
-              ctx.stroke();
           }
+          
+          // Draw Vertical Lines
+          ctx.beginPath();
+          ctx.lineWidth = 1;
+          [colX[1], colX[2], colX[3], colX[4], colX[5]].forEach(x => {
+              ctx.moveTo(x, tableStartY);
+              ctx.lineTo(x, tableStartY + tableH);
+          });
+          ctx.stroke();
 
       } else if (formData.type === 'breeding') {
           // === 產卵組版面 ===
@@ -550,18 +556,20 @@ export default function App() {
           drawInfoRow(infoStartY + 10 + infoRowH * 2, '種親♂:', pMale, '種親♀:', pFemale);
           drawInfoRow(infoStartY + 10 + infoRowH * 3, '預計孵化:', formData.expectedHatchDate, '', '');
 
-          // Breeding Record Table
+          // Breeding Record Table - 10 Records (2 columns x 5 data rows)
           const tableStartY = infoStartY + (infoRowH * infoRowsCount) + 20;
           const tableH = height - tableStartY - padding;
-          const tableRows = 4; // 1 Header + 3 Data (Fixed)
+          const tableRows = 6; // 1 Header + 5 Data
           const rowH = tableH / tableRows;
 
-          // Columns: 採收日(25%), 卵(10%), 蟲(10%), 備考(55%)
           const colX = [
               padding, 
-              padding + contentW * 0.25, 
-              padding + contentW * 0.35, 
-              padding + contentW * 0.45
+              padding + 110, 
+              padding + 195, 
+              padding + 280, 
+              padding + 390, 
+              padding + 475, 
+              width - padding
           ];
 
           // Draw Border
@@ -588,41 +596,48 @@ export default function App() {
               if (i === 0) {
                   // Header
                   ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+                  // Left
                   ctx.fillText('採收日', colX[0] + (colX[1]-colX[0])/2, textY);
                   ctx.fillText('卵', colX[1] + (colX[2]-colX[1])/2, textY);
                   ctx.fillText('蟲', colX[2] + (colX[3]-colX[2])/2, textY);
-                  ctx.fillText('備考', colX[3] + (width-padding-colX[3])/2, textY);
+                  // Right
+                  ctx.fillText('採收日', colX[3] + (colX[4]-colX[3])/2, textY);
+                  ctx.fillText('卵', colX[4] + (colX[5]-colX[4])/2, textY);
+                  ctx.fillText('蟲', colX[5] + (colX[6]-colX[5])/2, textY);
               } else {
-                  // Data (Fixed 3 rows, map to index 0, 1, 2)
-                  const record = formData.breedingRecords && formData.breedingRecords[i - 1];
-                  const rDate = record ? record.date : '';
-                  const rEggs = record ? record.eggs : '';
-                  const rLarvae = record ? record.larvae : '';
-                  const rMemo = record ? record.memo : '';
+                  // Data
+                  const leftIdx = i - 1;
+                  const rightIdx = i - 1 + 5;
+                  const recordLeft = formData.breedingRecords && formData.breedingRecords[leftIdx];
+                  const recordRight = formData.breedingRecords && formData.breedingRecords[rightIdx];
 
                   ctx.font = '14px "Noto Sans TC", sans-serif';
-                  ctx.fillText(rDate, colX[0] + (colX[1]-colX[0])/2, textY);
-                  ctx.fillText(rEggs, colX[1] + (colX[2]-colX[1])/2, textY);
-                  ctx.fillText(rLarvae, colX[2] + (colX[3]-colX[2])/2, textY);
                   
-                  ctx.textAlign = 'left';
-                  ctx.fillText(rMemo || '', colX[3] + 5, textY);
+                  if (recordLeft) {
+                      ctx.fillText(recordLeft.date || '', colX[0] + (colX[1]-colX[0])/2, textY);
+                      ctx.fillText(recordLeft.eggs || '', colX[1] + (colX[2]-colX[1])/2, textY);
+                      ctx.fillText(recordLeft.larvae || '', colX[2] + (colX[3]-colX[2])/2, textY);
+                  }
+                  
+                  if (recordRight) {
+                      ctx.fillText(recordRight.date || '', colX[3] + (colX[4]-colX[3])/2, textY);
+                      ctx.fillText(recordRight.eggs || '', colX[4] + (colX[5]-colX[4])/2, textY);
+                      ctx.fillText(recordRight.larvae || '', colX[5] + (colX[6]-colX[5])/2, textY);
+                  }
               }
-              
-              // Vertical Lines
-              ctx.beginPath();
-              ctx.lineWidth = 1;
-              ctx.moveTo(colX[1], tableStartY);
-              ctx.lineTo(colX[1], tableStartY + tableH);
-              ctx.moveTo(colX[2], tableStartY);
-              ctx.lineTo(colX[2], tableStartY + tableH);
-              ctx.moveTo(colX[3], tableStartY);
-              ctx.lineTo(colX[3], tableStartY + tableH);
-              ctx.stroke();
            }
+           
+           // Vertical Lines
+           ctx.beginPath();
+           ctx.lineWidth = 1;
+           [colX[1], colX[2], colX[3], colX[4], colX[5]].forEach(x => {
+               ctx.moveTo(x, tableStartY);
+               ctx.lineTo(x, tableStartY + tableH);
+           });
+           ctx.stroke();
 
       } else {
-          // === 成蟲版面 (原有的) ===
+          // === 成蟲版面 ===
           const contentH = height - padding * 2;
           const gridY = padding + headerH;
           const gridH = contentH - headerH;
@@ -666,11 +681,6 @@ export default function App() {
               ctx.fillStyle = '#000000';
               let displayVal = value || '-';
               
-              // Truncate if too long
-              const maxW = (isFullWidth ? contentW : contentW / 2) - cellPadding * 2;
-              if (ctx.measureText(displayVal).width > maxW) {
-                  // Simple truncation logic could be added here
-              }
               ctx.fillText(displayVal, x, y + 10);
           };
 
@@ -684,7 +694,7 @@ export default function App() {
           drawLabelValue('性別 / 尺寸', `${genderStr}  ${sizeStr}`, 0, 1);
           drawLabelValue('累代', formData.generation, 1, 1);
 
-          // Row 3: 種親公 | 種親母 (Added 'mm' suffix logic)
+          // Row 3: 種親公 | 種親母
           const pMale = formData.parentMale ? `${formData.parentMale}mm` : '';
           const pFemale = formData.parentFemale ? `${formData.parentFemale}mm` : '';
           drawLabelValue('種親 ♂', pMale, 0, 2);
