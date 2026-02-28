@@ -39,7 +39,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -408,9 +408,9 @@ export default function App() {
         const x1 = padding;
         const x2 = padding + colW;
         
-        // Draw Labels (Small)
-        ctx.font = '12px "Noto Sans TC", sans-serif';
-        ctx.fillStyle = '#666666';
+        // Draw Labels (Bold, same size as content)
+        ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+        ctx.fillStyle = '#000000';
         ctx.textAlign = 'left';
         ctx.fillText(label1, x1, y);
         ctx.fillText(label2, x2, y);
@@ -671,17 +671,17 @@ export default function App() {
               const x = padding + (col * (contentW / 2)) + cellPadding;
               const y = gridY + (row * rowH) + (rowH / 2);
               
-              // Draw Label (Small, gray)
-              ctx.font = '12px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#666666';
-              ctx.fillText(label, x, y - 10);
+              // Draw Label (Bold, same size as content)
+              ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              ctx.fillText(label, x, y - 14);
               
-              // Draw Value (Normal, Black)
+              // Draw Value (Bold)
               ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
               ctx.fillStyle = '#000000';
               let displayVal = value || '-';
               
-              ctx.fillText(displayVal, x, y + 10);
+              ctx.fillText(displayVal, x, y + 14);
           };
 
           // Row 1: 產地 | 血統
