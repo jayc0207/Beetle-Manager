@@ -213,6 +213,7 @@ const loadGoogleScript = (callback) => {
 export default function App() {
   // State
   const [activeTab, setActiveTab] = useState('adult');
+  const [adultFilter, setAdultFilter] = useState('all'); // 'all', 'alive', 'dead'
   const [view, setView] = useState('list'); // 'list', 'form', 'shared'
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1277,9 +1278,23 @@ export default function App() {
 
   // --- Filter and Sort ---
   
-  // 1. Filter by Tab
+  // 計算活蟲與死亡數量 (僅在成蟲分頁計算)
+  let aliveCount = 0;
+  let deadCount = 0;
+  if (activeTab === 'adult') {
+      const adultData = data.filter(item => item.type === 'adult');
+      deadCount = adultData.filter(item => !!item.deathDate).length;
+      aliveCount = adultData.length - deadCount;
+  }
+  
+  // 1. Filter by Tab and Status Mode
   let processedData = data.filter(item => {
-    if (activeTab === 'adult') return item.type === 'adult';
+    if (activeTab === 'adult') {
+        if (item.type !== 'adult') return false;
+        if (adultFilter === 'alive') return !item.deathDate; // 沒有死亡日代表活的
+        if (adultFilter === 'dead') return !!item.deathDate;   // 有死亡日代表死的
+        return true; // all
+    }
     if (activeTab === 'larva') return item.type === 'larva';
     if (activeTab === 'breeding') return item.type === 'breeding';
     return true;
@@ -2233,20 +2248,46 @@ export default function App() {
 
         <div className="text-[#8B5E3C] font-bold">AZ</div>
       </div>
+
+      {/* Header Title and Filters Area */}
       {view === 'list' && (
-        <div className="flex justify-between items-end mt-4 ml-1">
-            <h1 className="text-2xl font-bold text-[#4A3B32]">
-            {activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : activeTab === 'breeding' ? '產卵組' : '設定'}
-            </h1>
-            {isSignedIn ? (
-                <span className="text-xs text-green-600 flex items-center gap-1 mb-1 font-medium bg-green-50 px-2 py-1 rounded-full">
-                    <Cloud size={12}/> 已連線
-                </span>
-            ) : (
-                <span className="text-xs text-gray-400 flex items-center gap-1 mb-1 font-medium bg-gray-100 px-2 py-1 rounded-full">
-                    <Cloud size={12}/> 未連線
-                </span>
-            )}
+        <div className="flex justify-between items-start sm:items-end mt-4 ml-1">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#4A3B32]">
+                {activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : activeTab === 'breeding' ? '產卵組' : '設定'}
+                </h1>
+                
+                {/* 成蟲過濾器與統計 */}
+                {activeTab === 'adult' && (
+                    <div className="flex items-center gap-2">
+                        <select 
+                            value={adultFilter} 
+                            onChange={(e) => setAdultFilter(e.target.value)}
+                            className="bg-white border border-[#D6CDBF] text-[#5C4033] rounded-full px-2 py-1 text-xs focus:outline-none focus:border-[#8B5E3C] font-medium shadow-sm"
+                        >
+                            <option value="all">全部</option>
+                            <option value="alive">只顯示活蟲</option>
+                            <option value="dead">只顯示死亡蟲</option>
+                        </select>
+                        <div className="text-[10px] font-bold flex gap-1">
+                            <span className="bg-green-50 border border-green-200 text-green-700 px-1.5 py-1 rounded-md">活蟲: {aliveCount}</span>
+                            <span className="bg-gray-100 border border-gray-200 text-gray-600 px-1.5 py-1 rounded-md">死亡: {deadCount}</span>
+                        </div>
+                    </div>
+                )}
+            </div>
+            
+            <div className="shrink-0 mt-1 sm:mt-0">
+                {isSignedIn ? (
+                    <span className="text-xs text-green-600 flex items-center gap-1 mb-1 font-medium bg-green-50 px-2 py-1 rounded-full">
+                        <Cloud size={12}/> 已連線
+                    </span>
+                ) : (
+                    <span className="text-xs text-gray-400 flex items-center gap-1 mb-1 font-medium bg-gray-100 px-2 py-1 rounded-full">
+                        <Cloud size={12}/> 未連線
+                    </span>
+                )}
+            </div>
         </div>
       )}
     </div>
