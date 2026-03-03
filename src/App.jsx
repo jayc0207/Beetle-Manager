@@ -214,6 +214,7 @@ export default function App() {
   // State
   const [activeTab, setActiveTab] = useState('adult');
   const [adultFilter, setAdultFilter] = useState('all'); // 'all', 'alive', 'dead'
+  const [larvaFilter, setLarvaFilter] = useState('all'); // 'all', 'active', 'emerged', 'dead'
   const [view, setView] = useState('list'); // 'list', 'form', 'shared'
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -1278,13 +1279,34 @@ export default function App() {
 
   // --- Filter and Sort ---
   
-  // 計算活蟲與死亡數量 (僅在成蟲分頁計算)
+  // 計算成蟲統計
   let aliveCount = 0;
   let deadCount = 0;
   if (activeTab === 'adult') {
       const adultData = data.filter(item => item.type === 'adult');
       deadCount = adultData.filter(item => !!item.deathDate).length;
       aliveCount = adultData.length - deadCount;
+  }
+
+  // 計算幼蟲統計
+  let larvaActiveCount = 0;
+  let larvaEmergedCount = 0;
+  let larvaDeadCount = 0;
+  if (activeTab === 'larva') {
+      const larvaData = data.filter(item => item.type === 'larva');
+      larvaData.forEach(item => {
+          const records = item.larvaRecords || [];
+          const hasEmerged = records.some(r => r.stage === '羽化');
+          const hasDead = records.some(r => r.stage === '死亡');
+
+          if (hasDead) {
+              larvaDeadCount++;
+          } else if (hasEmerged) {
+              larvaEmergedCount++;
+          } else {
+              larvaActiveCount++;
+          }
+      });
   }
   
   // 1. Filter by Tab and Status Mode
@@ -1295,7 +1317,18 @@ export default function App() {
         if (adultFilter === 'dead') return !!item.deathDate;   // 有死亡日代表死的
         return true; // all
     }
-    if (activeTab === 'larva') return item.type === 'larva';
+    if (activeTab === 'larva') {
+        if (item.type !== 'larva') return false;
+        const records = item.larvaRecords || [];
+        const hasEmerged = records.some(r => r.stage === '羽化');
+        const hasDead = records.some(r => r.stage === '死亡');
+        const isActive = !hasEmerged && !hasDead;
+
+        if (larvaFilter === 'active') return isActive;
+        if (larvaFilter === 'emerged') return hasEmerged;
+        if (larvaFilter === 'dead') return hasDead;
+        return true; // all
+    }
     if (activeTab === 'breeding') return item.type === 'breeding';
     return true;
   });
@@ -2035,6 +2068,7 @@ export default function App() {
                             <option value="L3">L3</option>
                             <option value="化蛹">化蛹</option>
                             <option value="羽化">羽化</option>
+                            <option value="死亡">死亡</option>
                         </select>
                         <input 
                             type="number" 
@@ -2275,6 +2309,27 @@ export default function App() {
                         </div>
                     </div>
                 )}
+
+                {/* 幼蟲過濾器與統計 */}
+                {activeTab === 'larva' && (
+                    <div className="flex items-center gap-2">
+                        <select 
+                            value={larvaFilter} 
+                            onChange={(e) => setLarvaFilter(e.target.value)}
+                            className="bg-white border border-[#D6CDBF] text-[#5C4033] rounded-full px-2 py-1 text-xs focus:outline-none focus:border-[#8B5E3C] font-medium shadow-sm"
+                        >
+                            <option value="all">全部</option>
+                            <option value="active">只顯示幼蟲</option>
+                            <option value="emerged">只顯示羽化</option>
+                            <option value="dead">只顯示死亡</option>
+                        </select>
+                        <div className="text-[10px] font-bold flex flex-wrap gap-1">
+                            <span className="bg-green-50 border border-green-200 text-green-700 px-1.5 py-1 rounded-md">幼蟲: {larvaActiveCount}</span>
+                            <span className="bg-blue-50 border border-blue-200 text-blue-700 px-1.5 py-1 rounded-md">羽化: {larvaEmergedCount}</span>
+                            <span className="bg-gray-100 border border-gray-200 text-gray-600 px-1.5 py-1 rounded-md">死亡: {larvaDeadCount}</span>
+                        </div>
+                    </div>
+                )}
             </div>
             
             <div className="shrink-0 mt-1 sm:mt-0">
@@ -2346,9 +2401,15 @@ export default function App() {
              // 1. If dead and has specimen photo -> Specimen Photo (Grayscale)
              // 2. Larva logic: Emergence > Pupation > Cover
              // 3. Else -> Favorite Photo (item.image)
-             const isDead = item.type === 'adult' && item.deathDate;
-             const showSpecimen = isDead && item.specimenImage;
+             const isDeadAdult = item.type === 'adult' && item.deathDate;
+             const showSpecimen = isDeadAdult && item.specimenImage;
              
+             // 判斷幼蟲是否已經羽化或死亡
+             const isLarvaEmergedOrDead = item.type === 'larva' && item.larvaRecords && item.larvaRecords.some(r => r.stage === '羽化' || r.stage === '死亡');
+             
+             // 結合條件判斷是否要套用黑白效果
+             const applyGrayscale = showSpecimen || isLarvaEmergedOrDead;
+
              let displayImage = item.image || (item.images && item.images[0]);
 
              if (showSpecimen) {
@@ -2378,7 +2439,7 @@ export default function App() {
                 onClick={() => handleEditItem(item)}
                 className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden group"
                 >
-                <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${showSpecimen ? 'grayscale opacity-80' : ''}`}>
+                <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
                     {displayImage ? (
                     <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
                     ) : (
