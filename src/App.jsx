@@ -41,10 +41,10 @@ import {
 } from 'lucide-react';
 
 // ==========================================
-// CONFIGURATION - 請填寫您的 Client ID 與 API Key
+// CONFIGURATION - 請填寫您的 Client ID (API Key 為選填)
 // ==========================================
 const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
-const API_KEY = ''; // <--- 【請注意】這裡也需要填寫您的真實 API Key
+const API_KEY = ''; // <--- (選填) 由於您使用 OAuth 登入存取私人資料，此項留空通常也能運作
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
   'https://sheets.googleapis.com/$discovery/rest?version=v4',
@@ -310,7 +310,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState(''); 
   const [errorMsg, setErrorMsg] = useState('');
-  const [gisInitError, setGisInitError] = useState(''); // 記錄初始化錯誤原因
   
   const [viewImage, setViewImage] = useState(null);
   
@@ -368,53 +367,61 @@ export default function App() {
     const savedData = localStorage.getItem('beetle_app_data');
     if (savedData) setData(JSON.parse(savedData));
 
-    // Init Google Scripts
-    try {
-      loadGoogleScript(() => {
-        if (window.gapi) window.gapi.load('client', initializeGapiClient);
-      });
-      
-      const script2 = document.createElement('script');
-      script2.src = 'https://accounts.google.com/gsi/client';
-      script2.onload = () => {
-        try {
-            const client = window.google.accounts.oauth2.initTokenClient({
-                client_id: CLIENT_ID,
-                scope: SCOPES,
-                callback: '', 
-            });
-            setTokenClient(client);
-            setGisInited(true);
-        } catch (e) {
-            console.warn("GIS Init failed:", e);
-            setGisInitError(e.message || "未知原因阻擋了 Google 登入模組");
+    // Init Google Scripts (Enhanced robust loading)
+    let isMounted = true;
+
+    const initializeGIS = () => {
+        if (window.google && window.google.accounts && window.google.accounts.oauth2) {
+            try {
+                const client = window.google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: '', 
+                });
+                if (isMounted) {
+                    setTokenClient(client);
+                    setGisInited(true);
+                }
+            } catch (e) {
+                console.warn("GIS Init failed:", e);
+            }
         }
-      };
-      script2.onerror = () => {
-          setGisInitError("無法載入 Google 登入腳本 (網路或廣告阻擋外掛)");
-      };
-      document.body.appendChild(script2);
+    };
 
-    } catch (e) {
-      console.log("Google scripts failed to load", e);
-      setGisInitError("Google API 腳本載入失敗");
+    if (!document.getElementById('gapi-script')) {
+        const script = document.createElement('script');
+        script.id = 'gapi-script';
+        script.src = 'https://apis.google.com/js/api.js';
+        script.onload = () => { if (isMounted && window.gapi) window.gapi.load('client', initializeGapiClient); };
+        document.body.appendChild(script);
+    } else if (window.gapi) {
+        window.gapi.load('client', initializeGapiClient);
     }
-  }, []);
 
-  const loadGoogleScript = (callback) => {
-    const script = document.createElement('script');
-    script.src = 'https://apis.google.com/js/api.js';
-    script.onload = () => callback();
-    script.onerror = () => console.error("Error loading GAPI script");
-    document.body.appendChild(script);
-  };
+    if (!document.getElementById('gsi-script')) {
+        const script2 = document.createElement('script');
+        script2.id = 'gsi-script';
+        script2.src = 'https://accounts.google.com/gsi/client';
+        script2.onload = initializeGIS;
+        document.body.appendChild(script2);
+    } else {
+        initializeGIS();
+    }
+
+    return () => { isMounted = false; };
+  }, []);
 
   const initializeGapiClient = async () => {
     try {
-        await window.gapi.client.init({
-            apiKey: API_KEY, // Needs API KEY here
+        const initConfig = {
             discoveryDocs: DISCOVERY_DOCS,
-        });
+        };
+        // 只有當 API_KEY 有值時才帶入，如果沒值 (私人資料OAuth)，Google API 大多數時候也能通
+        if (API_KEY) {
+            initConfig.apiKey = API_KEY;
+        }
+        
+        await window.gapi.client.init(initConfig);
         setGapiInited(true);
     } catch (e) {
         console.warn("GAPI init failed:", e);
@@ -475,7 +482,7 @@ export default function App() {
             ctx.stroke();
           };
     
-          // 繪製下半部邏輯... (與前一版本完全相同)
+          // 繪製下半部邏輯...
           if (formData.type === 'larva') {
               const infoStartY = padding + headerH;
               const infoRowH = 35; 
@@ -520,33 +527,35 @@ export default function App() {
   }, [showLabelModal, formData]);
 
   const handleAuthClick = () => {
-    // Check Config
+    // 檢查 Client ID
     if (CLIENT_ID.includes('YOUR_GOOGLE_CLIENT_ID_HERE') || !CLIENT_ID) {
-        alert("【設定未完成】\n\n您尚未設定 Google Client ID。\n請將最上方的 CLIENT_ID 變數替換為您從 Google Cloud Console 申請的真實 ID。");
-        return;
-    }
-    
-    if (!API_KEY) {
-        alert("【缺少 API Key】\n\n您尚未設定 Google API Key。\n請將最上方的 API_KEY 變數填寫完成。");
+        alert("【設定未完成】\n\n您尚未設定 Google Client ID。");
         return;
     }
 
     setErrorMsg('');
     
-    // 增強錯誤提示
-    if (!tokenClient) {
-        alert(
-          `Google 服務初始化失敗！\n\n` +
-          `這通常是因為以下原因造成：\n` +
-          `1. 【最常見】您正在這個網頁的「預覽視窗」中執行。Google 禁止在 Iframe 嵌入環境中彈出登入視窗。您必須將此程式碼下載並在您自己的網域（或 localhost）執行。\n` +
-          `2. 您在 Google Cloud Console 中的「已授權的 JavaScript 來源」未加入您目前執行的網址。\n` +
-          `3. 網路阻擋了載入。\n\n` +
-          `系統回報錯誤: ${gisInitError || '未載入完成'}`
-        );
+    // 如果 tokenClient 因為載入太慢還沒準備好，嘗試即時初始化
+    let currentTokenClient = tokenClient;
+    if (!currentTokenClient && window.google && window.google.accounts && window.google.accounts.oauth2) {
+        try {
+            currentTokenClient = window.google.accounts.oauth2.initTokenClient({
+                client_id: CLIENT_ID,
+                scope: SCOPES,
+                callback: '', 
+            });
+            setTokenClient(currentTokenClient);
+        } catch(e) {
+            console.warn("Fallback GIS init failed", e);
+        }
+    }
+
+    if (!currentTokenClient) {
+        alert("Google 登入模組尚未載入完成。請確認您的網路連線，或重整頁面後再試一次！");
         return;
     }
 
-    tokenClient.callback = async (resp) => {
+    currentTokenClient.callback = async (resp) => {
       if (resp.error) {
         throw (resp);
       }
@@ -556,9 +565,9 @@ export default function App() {
     };
 
     if (window.gapi.client.getToken() === null) {
-      tokenClient.requestAccessToken({prompt: 'consent'});
+      currentTokenClient.requestAccessToken({prompt: 'consent'});
     } else {
-      tokenClient.requestAccessToken({prompt: ''});
+      currentTokenClient.requestAccessToken({prompt: ''});
     }
   };
 
@@ -767,7 +776,7 @@ export default function App() {
   const handleApiError = (e, prefix) => {
       let msg = e.result?.error?.message || e.message || "未知錯誤";
       if (e.result?.error?.code === 403 || msg.includes("permission") || msg.includes("scope")) {
-          msg = "權限不足。請確認 API Key 是否設定正確，或登出後重新登入。";
+          msg = "權限不足。請確認已勾選所需的 Google Drive 與 Sheets 授權，或登出後重新登入。";
       }
       const fullMsg = `${prefix}: ${msg}`;
       setErrorMsg(fullMsg);
