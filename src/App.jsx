@@ -35,7 +35,9 @@ import {
   WifiOff,
   Printer,
   LayoutGrid,
-  LayoutList
+  LayoutList,
+  Bold,
+  Type
 } from 'lucide-react';
 
 // ==========================================
@@ -202,15 +204,93 @@ const StarRating = ({ rating, onChange, readOnly = false }) => {
   );
 };
 
-// --- Google API Helper Functions ---
+// --- Rich Text Editor Component ---
+const RichTextEditor = ({ value, onChange, placeholder }) => {
+  const editorRef = useRef(null);
 
-const loadGoogleScript = (callback) => {
-  const script = document.createElement('script');
-  script.src = 'https://apis.google.com/js/api.js';
-  script.onload = () => callback();
-  script.onerror = () => console.error("Error loading GAPI script");
-  document.body.appendChild(script);
+  useEffect(() => {
+    // 同步外部變數 (如首次載入或切換資料時)
+    if (editorRef.current && value !== editorRef.current.innerHTML) {
+      if (value === undefined || value === null) {
+          editorRef.current.innerHTML = '';
+      } else if (editorRef.current.innerHTML !== value) {
+          editorRef.current.innerHTML = value;
+      }
+    }
+  }, [value]);
+
+  const handleInput = () => {
+    if (editorRef.current) {
+      onChange(editorRef.current.innerHTML);
+    }
+  };
+
+  const execCmd = (cmd, arg = null) => {
+    document.execCommand(cmd, false, arg);
+    editorRef.current.focus();
+    handleInput();
+  };
+
+  const handleLink = () => {
+    const url = window.prompt('請輸入網址 (包含 http:// 或 https://):', 'https://');
+    if (url) {
+      const selection = window.getSelection();
+      const selectedText = selection.toString();
+      
+      // 使用 insertHTML 以確保產生具有 target="_blank" 的連結，這比單純的 createLink 更符合需求
+      const linkHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer">${selectedText || url}</a>`;
+      execCmd('insertHTML', linkHTML);
+    }
+  };
+
+  return (
+    <div className="border border-[#D6CDBF] rounded-lg overflow-hidden bg-[#F5F1E8]">
+      {/* Toolbar */}
+      <div className="bg-[#E8E1D5] px-2 py-1.5 flex items-center gap-3 border-b border-[#D6CDBF] flex-wrap">
+        <button type="button" onClick={() => execCmd('bold')} className="w-6 h-6 flex items-center justify-center hover:bg-[#D6CDBF] rounded text-[#5C4033] transition-colors" title="粗體">
+            <Bold size={14} strokeWidth={3} />
+        </button>
+        
+        <div className="flex items-center gap-1 bg-white/50 px-1.5 py-0.5 rounded border border-[#D6CDBF]/50">
+            <Type size={12} className="text-[#8B5E3C]" />
+            <select onChange={(e) => execCmd('fontSize', e.target.value)} className="bg-transparent text-xs focus:outline-none text-[#5C4033] cursor-pointer" title="文字大小" defaultValue="3">
+                <option value="1">極小</option>
+                <option value="2">小</option>
+                <option value="3">一般</option>
+                <option value="4">大</option>
+                <option value="5">極大</option>
+            </select>
+        </div>
+
+        <div className="flex items-center gap-1 bg-white/50 px-1.5 py-0.5 rounded border border-[#D6CDBF]/50">
+            <span className="text-[10px] text-[#8B5E3C] font-bold">A</span>
+            <input type="color" onChange={(e) => execCmd('foreColor', e.target.value)} className="w-4 h-4 p-0 border-0 bg-transparent cursor-pointer" title="文字顏色" />
+        </div>
+
+        <div className="flex items-center border-l border-[#D6CDBF] pl-2 gap-1">
+            <button type="button" onClick={handleLink} className="p-1 hover:bg-[#D6CDBF] rounded text-[#5C4033] flex items-center gap-1 transition-colors" title="加入網址連結">
+                <LinkIcon size={14} />
+            </button>
+            <button type="button" onClick={() => execCmd('unlink')} className="p-1 hover:bg-[#D6CDBF] rounded text-[#5C4033] opacity-50 transition-colors" title="移除連結">
+                <LinkIcon size={14} className="line-through" />
+            </button>
+        </div>
+      </div>
+      
+      {/* Editor Content Area */}
+      <div
+        ref={editorRef}
+        contentEditable
+        onInput={handleInput}
+        onBlur={handleInput}
+        className="p-3 text-sm focus:outline-none rte-content whitespace-pre-wrap break-words"
+        style={{ minHeight: '120px' }}
+        data-placeholder={placeholder}
+      />
+    </div>
+  );
 };
+
 
 export default function App() {
   // State
@@ -1720,7 +1800,10 @@ export default function App() {
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block flex items-center gap-1">
                                   <Database size={12}/> 飼育筆記
                               </label>
-                              <p className="text-sm text-[#5C4033] whitespace-pre-wrap">{item.memo}</p>
+                              <div 
+                                className="text-sm text-[#5C4033] whitespace-pre-wrap break-words rte-content"
+                                dangerouslySetInnerHTML={{ __html: item.memo }} 
+                              />
                           </div>
                       )}
 
@@ -1957,11 +2040,11 @@ export default function App() {
         </InputGroup>
 
         <InputGroup label="備註">
-          <textarea 
-             className="w-full bg-[#F5F1E8] rounded-lg p-3 text-sm focus:outline-none min-h-[100px]"
-             placeholder="記錄飼育細節..."
+          {/* 使用升級後的 RichTextEditor */}
+          <RichTextEditor 
              value={formData.memo}
-             onChange={e => setFormData({...formData, memo: e.target.value})}
+             onChange={val => setFormData({...formData, memo: val})}
+             placeholder="記錄飼育細節、心情分享、或加入相關網頁連結..."
           />
         </InputGroup>
 
@@ -2728,6 +2811,23 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans text-[#4A3B32]">
+      {/* 為了讓 RichTextEditor 正確顯示樣式及 placeholder，加入一段專屬 CSS */}
+      <style>{`
+        .rte-content a { color: #3b82f6; text-decoration: underline; cursor: pointer; }
+        .rte-content a:hover { color: #2563eb; }
+        .rte-content:empty:before {
+          content: attr(data-placeholder);
+          color: #A09383;
+          pointer-events: none;
+          display: block;
+        }
+        .rte-content font[size="1"] { font-size: 0.75rem; }
+        .rte-content font[size="2"] { font-size: 0.875rem; }
+        .rte-content font[size="3"] { font-size: 1rem; }
+        .rte-content font[size="4"] { font-size: 1.125rem; }
+        .rte-content font[size="5"] { font-size: 1.25rem; }
+      `}</style>
+
       {view === 'shared' ? (
           renderSharedView()
       ) : (
