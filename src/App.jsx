@@ -218,6 +218,14 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
     }
   };
 
+  const handleEditorClick = (e) => {
+    // 檢查點擊的目標是否為超連結 <a> 標籤
+    if (e.target.tagName === 'A' && e.target.href) {
+      // 另開新分頁開啟網址
+      window.open(e.target.href, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   const execCmd = (cmd, arg = null) => {
     document.execCommand(cmd, false, arg);
     editorRef.current.focus();
@@ -274,6 +282,7 @@ const RichTextEditor = ({ value, onChange, placeholder }) => {
         contentEditable
         onInput={handleInput}
         onBlur={handleInput}
+        onClick={handleEditorClick}
         className="p-3 text-sm focus:outline-none rte-content whitespace-pre-wrap break-words"
         style={{ minHeight: '120px' }}
         data-placeholder={placeholder}
