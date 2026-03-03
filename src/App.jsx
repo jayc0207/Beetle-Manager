@@ -39,7 +39,7 @@ import {
 // ==========================================
 // CONFIGURATION - 請確認這裡填的是您的 Client ID
 // ==========================================
-const CLIENT_ID = '334603460658-jqlon9pdv8nd6q08e9kh6epd2t7cseo9.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
+const CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE.apps.googleusercontent.com'; // <--- 【請注意】請將這裡替換為您的真實 Client ID
 const API_KEY = ''; 
 const SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 const DISCOVERY_DOCS = [
@@ -215,6 +215,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState('adult');
   const [adultFilter, setAdultFilter] = useState('all'); // 'all', 'alive', 'dead'
   const [larvaFilter, setLarvaFilter] = useState('all'); // 'all', 'active', 'emerged', 'dead'
+  const [breedingFilter, setBreedingFilter] = useState('all'); // 'all', 'active', 'closed'
   const [view, setView] = useState('list'); // 'list', 'form', 'shared'
   const [data, setData] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -271,6 +272,7 @@ export default function App() {
     acquisitionDate: '',
     startFeedingDate: '',
     deathDate: '',
+    closeDate: '', // 新增產卵組關閉日期
     specimenImage: null,
     pupationImage: null,
     emergenceImage: null,
@@ -556,7 +558,7 @@ export default function App() {
           drawInfoRow(infoStartY + 10, '產地:', formData.origin, '血統:', formData.bloodline);
           drawInfoRow(infoStartY + 10 + infoRowH, '累代:', formData.generation, '建立日期:', formData.date);
           drawInfoRow(infoStartY + 10 + infoRowH * 2, '種親♂:', pMale, '種親♀:', pFemale);
-          drawInfoRow(infoStartY + 10 + infoRowH * 3, '預計孵化:', formData.expectedHatchDate, '', '');
+          drawInfoRow(infoStartY + 10 + infoRowH * 3, '預計孵化:', formData.expectedHatchDate, '關閉日期:', formData.closeDate || '-');
 
           // Breeding Record Table - 10 Records (2 columns x 5 data rows)
           const tableStartY = infoStartY + (infoRowH * infoRowsCount) + 20;
@@ -1128,6 +1130,7 @@ export default function App() {
       acquisitionDate: '',
       startFeedingDate: '',
       deathDate: '',
+      closeDate: '',
       specimenImage: null,
       pupationImage: null,
       emergenceImage: null,
@@ -1165,6 +1168,7 @@ export default function App() {
         larvaRecords: item.larvaRecords || [],
         breedingRecords: item.breedingRecords || [], // Migration
         expectedHatchDate: item.expectedHatchDate || '',
+        closeDate: item.closeDate || '',
         enableEmailNotify: item.enableEmailNotify || false
     });
     setEditingItem(item);
@@ -1308,6 +1312,15 @@ export default function App() {
           }
       });
   }
+
+  // 計算產卵組統計
+  let breedingActiveCount = 0;
+  let breedingClosedCount = 0;
+  if (activeTab === 'breeding') {
+      const breedingData = data.filter(item => item.type === 'breeding');
+      breedingClosedCount = breedingData.filter(item => !!item.closeDate).length;
+      breedingActiveCount = breedingData.length - breedingClosedCount;
+  }
   
   // 1. Filter by Tab and Status Mode
   let processedData = data.filter(item => {
@@ -1329,7 +1342,12 @@ export default function App() {
         if (larvaFilter === 'dead') return hasDead;
         return true; // all
     }
-    if (activeTab === 'breeding') return item.type === 'breeding';
+    if (activeTab === 'breeding') {
+        if (item.type !== 'breeding') return false;
+        if (breedingFilter === 'active') return !item.closeDate;
+        if (breedingFilter === 'closed') return !!item.closeDate;
+        return true; // all
+    }
     return true;
   });
 
@@ -1858,6 +1876,17 @@ export default function App() {
           />
         </InputGroup>
 
+        {formData.type === 'breeding' && (
+            <InputGroup label="關閉日期">
+              <input
+                 type="date"
+                 value={formData.closeDate}
+                 onChange={e => setFormData({...formData, closeDate: e.target.value})}
+                 className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium"
+              />
+            </InputGroup>
+        )}
+
         <InputGroup label="照片記錄 (可多張)">
           <div className="grid grid-cols-3 gap-2 mb-2">
              {formData.images && formData.images.map((img, index) => (
@@ -2330,6 +2359,25 @@ export default function App() {
                         </div>
                     </div>
                 )}
+
+                {/* 產卵組過濾器與統計 */}
+                {activeTab === 'breeding' && (
+                    <div className="flex items-center gap-2">
+                        <select 
+                            value={breedingFilter} 
+                            onChange={(e) => setBreedingFilter(e.target.value)}
+                            className="bg-white border border-[#D6CDBF] text-[#5C4033] rounded-full px-2 py-1 text-xs focus:outline-none focus:border-[#8B5E3C] font-medium shadow-sm"
+                        >
+                            <option value="all">全部</option>
+                            <option value="active">只顯示現有</option>
+                            <option value="closed">只顯示關閉</option>
+                        </select>
+                        <div className="text-[10px] font-bold flex flex-wrap gap-1">
+                            <span className="bg-green-50 border border-green-200 text-green-700 px-1.5 py-1 rounded-md">現有: {breedingActiveCount}</span>
+                            <span className="bg-gray-100 border border-gray-200 text-gray-600 px-1.5 py-1 rounded-md">關閉: {breedingClosedCount}</span>
+                        </div>
+                    </div>
+                )}
             </div>
             
             <div className="shrink-0 mt-1 sm:mt-0">
@@ -2407,8 +2455,11 @@ export default function App() {
              // 判斷幼蟲是否已經羽化或死亡
              const isLarvaEmergedOrDead = item.type === 'larva' && item.larvaRecords && item.larvaRecords.some(r => r.stage === '羽化' || r.stage === '死亡');
              
+             // 判斷產卵組是否已經關閉
+             const isBreedingClosed = item.type === 'breeding' && !!item.closeDate;
+             
              // 結合條件判斷是否要套用黑白效果
-             const applyGrayscale = showSpecimen || isLarvaEmergedOrDead;
+             const applyGrayscale = showSpecimen || isLarvaEmergedOrDead || isBreedingClosed;
 
              let displayImage = item.image || (item.images && item.images[0]);
 
@@ -2484,6 +2535,7 @@ export default function App() {
                         {item.date}
                         {item.type === 'adult' && item.deathDate ? ` ~ ${item.deathDate}` : ''}
                         {item.type === 'larva' && lastRecordDate ? ` ~ ${lastRecordDate}` : ''}
+                        {item.type === 'breeding' && item.closeDate ? ` ~ ${item.closeDate}` : ''}
                     </span>
                     </div>
                 </div>
