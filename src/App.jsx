@@ -33,7 +33,9 @@ import {
   FolderOpen,
   Link as LinkIcon,
   WifiOff,
-  Printer
+  Printer,
+  LayoutGrid,
+  LayoutList
 } from 'lucide-react';
 
 // ==========================================
@@ -221,6 +223,7 @@ export default function App() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('id'); // 'id', 'name', 'rating', 'date'
   const [sortOrder, setSortOrder] = useState('desc'); // 'asc', 'desc'
+  const [listDisplayMode, setListDisplayMode] = useState('list'); // 'list', 'grid'
   
   const [editingItem, setEditingItem] = useState(null);
   const [showQR, setShowQR] = useState(false);
@@ -2281,6 +2284,17 @@ export default function App() {
           />
         </div>
 
+        {/* View Mode Toggle */}
+        {view === 'list' && activeTab !== 'settings' && (
+             <button 
+                onClick={() => setListDisplayMode(prev => prev === 'list' ? 'grid' : 'list')}
+                className="w-8 h-8 rounded-full bg-[#E8E1D5] text-[#8B5E3C] flex items-center justify-center transition-colors hover:bg-[#D6CDBF]"
+                title={listDisplayMode === 'list' ? '切換為方格視圖' : '切換為列表視圖'}
+             >
+                 {listDisplayMode === 'list' ? <LayoutGrid size={14} /> : <LayoutList size={14} />}
+             </button>
+        )}
+
         {/* Sort Button (Cycle through options) */}
         {view === 'list' && activeTab !== 'settings' && (
             <button 
@@ -2443,7 +2457,7 @@ export default function App() {
       )}
 
       {processedData.length === 0 ? renderEmptyState() : (
-        <div className="grid gap-3">
+        <div className={`grid ${listDisplayMode === 'grid' ? 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3' : 'gap-3'}`}>
           {processedData.map((item) => {
              // Logic for thumbnail display: 
              // 1. If dead and has specimen photo -> Specimen Photo (Grayscale)
@@ -2484,71 +2498,138 @@ export default function App() {
                 ? item.larvaRecords[item.larvaRecords.length - 1].date
                 : null;
 
-             return (
+             return listDisplayMode === 'grid' ? (
+                // --- 方格視圖 (Grid View) ---
                 <div 
-                key={item.id} 
-                onClick={() => handleEditItem(item)}
-                className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden group"
+                    key={item.id} 
+                    onClick={() => handleEditItem(item)}
+                    className="bg-white p-2 rounded-xl shadow-sm border border-[#F0EBE0] flex flex-col gap-2 active:scale-[0.98] transition-transform relative overflow-hidden group cursor-pointer"
                 >
-                <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
-                    {displayImage ? (
-                    <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
-                    ) : (
-                    <Bug className="text-[#D6CDBF]" />
-                    )}
-                </div>
-                <div className="flex-1">
-                    <div className="flex justify-between items-start">
-                    <div className="flex flex-col">
-                        <span className="text-[10px] text-[#A09383] font-mono mb-0.5">{item.customId}</span>
-                        <h3 className="font-bold text-[#4A3B32]">{item.name || '未命名'}</h3>
+                    {/* 圖片區塊 */}
+                    <div className={`w-full aspect-square bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
+                        {displayImage ? (
+                            <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <Bug className="text-[#D6CDBF]" size={32} />
+                        )}
+                        <div className="absolute bottom-1 right-1 flex flex-col items-end gap-1">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white shadow-sm font-mono backdrop-blur-sm">
+                                {item.generation || 'CB'}
+                            </span>
+                        </div>
+                        {item.rating > 0 && (
+                            <div className="absolute top-1 right-1 bg-white/80 p-0.5 rounded shadow-sm backdrop-blur-sm">
+                                <StarRating rating={item.rating} readOnly={true} />
+                            </div>
+                        )}
                     </div>
-                    <div className="flex flex-col items-end gap-1">
-                        <span className="text-xs px-2 py-0.5 rounded bg-[#F5F1E8] text-[#8B5E3C]">
-                            {item.generation || 'CB'}
-                        </span>
-                        {item.rating > 0 && <StarRating rating={item.rating} readOnly={true} />}
-                    </div>
-                    </div>
-                    {item.scientificName && (
-                        <p className="text-xs text-[#8B5E3C] italic -mt-0.5 mb-1">{item.scientificName}</p>
-                    )}
-                    <p className="text-xs text-[#A09383]">{item.origin || '未知產地'}</p>
-                    <div className="mt-2 flex items-center gap-3 text-sm">
-                    {/* Modified Logic Here: Show if gender is known OR type is larva (regardless of gender) */}
-                    {(item.gender !== 'unknown' || item.type === 'larva') && (
-                        <span className={`flex items-center gap-1 ${
-                            item.gender === 'male' ? 'text-blue-500' : 
-                            item.gender === 'female' ? 'text-red-500' : 
-                            'text-[#8B5E3C]' // Neutral color for unknown larva
-                        }`}>
-                        {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} 
-                        {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
-                        </span>
-                    )}
-                    {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
-                        <span className="text-xs text-[#8B5E3C] bg-[#E8DCC8] px-1 rounded ml-1">
-                            {item.larvaRecords[item.larvaRecords.length - 1].stage}
-                        </span>
-                    )}
-                    <span className="text-xs text-[#A09383] ml-auto">
-                        {item.date}
-                        {item.type === 'adult' && item.deathDate ? ` ~ ${item.deathDate}` : ''}
-                        {item.type === 'larva' && lastRecordDate ? ` ~ ${lastRecordDate}` : ''}
-                        {item.type === 'breeding' && item.closeDate ? ` ~ ${item.closeDate}` : ''}
-                    </span>
-                    </div>
-                </div>
 
-                {/* Share Button (Absolute Positioned) */}
-                <button 
-                  onClick={(e) => handleShareClick(e, item)}
-                  className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#FDFBF7] text-[#8B5E3C] flex items-center justify-center shadow-sm border border-[#F0EBE0] opacity-0 group-hover:opacity-100 transition-opacity z-10"
-                  title="分享"
+                    {/* 資訊區塊 (無學名) */}
+                    <div className="flex flex-col px-1 pb-1">
+                        <span className="text-[9px] text-[#A09383] font-mono leading-none mb-1">{item.customId}</span>
+                        <h3 className="font-bold text-[#4A3B32] text-sm truncate leading-tight">{item.name || '未命名'}</h3>
+                        <p className="text-[10px] text-[#A09383] truncate mt-0.5">{item.origin || '未知產地'}</p>
+
+                        <div className="mt-1.5 flex items-center justify-between">
+                            {item.type === 'breeding' ? (
+                                <span className="text-[9px] text-[#A09383] truncate">
+                                    {item.date} {item.closeDate ? `~ ${item.closeDate}` : ''}
+                                </span>
+                            ) : (
+                                <>
+                                    {(item.gender !== 'unknown' || item.type === 'larva') && (
+                                        <span className={`flex items-center gap-0.5 text-xs font-bold ${
+                                            item.gender === 'male' ? 'text-blue-500' : 
+                                            item.gender === 'female' ? 'text-red-500' : 
+                                            'text-[#8B5E3C]'
+                                        }`}>
+                                            {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} 
+                                            {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
+                                        </span>
+                                    )}
+                                    {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
+                                        <span className="text-[10px] text-[#8B5E3C] bg-[#E8DCC8] px-1 rounded ml-auto">
+                                            {item.larvaRecords[item.larvaRecords.length - 1].stage}
+                                        </span>
+                                    )}
+                                </>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Share Button (Absolute Positioned) */}
+                    <button 
+                      onClick={(e) => handleShareClick(e, item)}
+                      className="absolute top-2 left-2 w-7 h-7 rounded-full bg-white/80 text-[#8B5E3C] flex items-center justify-center shadow-sm backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      title="分享"
+                    >
+                        <Share2 size={12} />
+                    </button>
+                </div>
+             ) : (
+                // --- 條列視圖 (List View - 原始樣式) ---
+                <div 
+                    key={item.id} 
+                    onClick={() => handleEditItem(item)}
+                    className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden group cursor-pointer"
                 >
-                    <Share2 size={14} />
-                </button>
+                    <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
+                        {displayImage ? (
+                        <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
+                        ) : (
+                        <Bug className="text-[#D6CDBF]" />
+                        )}
+                    </div>
+                    <div className="flex-1 overflow-hidden">
+                        <div className="flex justify-between items-start">
+                        <div className="flex flex-col overflow-hidden mr-2">
+                            <span className="text-[10px] text-[#A09383] font-mono mb-0.5">{item.customId}</span>
+                            <h3 className="font-bold text-[#4A3B32] truncate">{item.name || '未命名'}</h3>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                            <span className="text-xs px-2 py-0.5 rounded bg-[#F5F1E8] text-[#8B5E3C]">
+                                {item.generation || 'CB'}
+                            </span>
+                            {item.rating > 0 && <StarRating rating={item.rating} readOnly={true} />}
+                        </div>
+                        </div>
+                        {item.scientificName && (
+                            <p className="text-xs text-[#8B5E3C] italic -mt-0.5 mb-1 truncate">{item.scientificName}</p>
+                        )}
+                        <p className="text-xs text-[#A09383] truncate">{item.origin || '未知產地'}</p>
+                        <div className="mt-2 flex items-center gap-3 text-sm">
+                        {(item.gender !== 'unknown' || item.type === 'larva') && (
+                            <span className={`flex items-center gap-1 ${
+                                item.gender === 'male' ? 'text-blue-500' : 
+                                item.gender === 'female' ? 'text-red-500' : 
+                                'text-[#8B5E3C]' 
+                            }`}>
+                            {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} 
+                            {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
+                            </span>
+                        )}
+                        {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
+                            <span className="text-xs text-[#8B5E3C] bg-[#E8DCC8] px-1 rounded ml-1">
+                                {item.larvaRecords[item.larvaRecords.length - 1].stage}
+                            </span>
+                        )}
+                        <span className="text-xs text-[#A09383] ml-auto truncate">
+                            {item.date}
+                            {item.type === 'adult' && item.deathDate ? ` ~ ${item.deathDate}` : ''}
+                            {item.type === 'larva' && lastRecordDate ? ` ~ ${lastRecordDate}` : ''}
+                            {item.type === 'breeding' && item.closeDate ? ` ~ ${item.closeDate}` : ''}
+                        </span>
+                        </div>
+                    </div>
 
+                    {/* Share Button (Absolute Positioned) */}
+                    <button 
+                      onClick={(e) => handleShareClick(e, item)}
+                      className="absolute bottom-2 right-2 w-8 h-8 rounded-full bg-[#FDFBF7] text-[#8B5E3C] flex items-center justify-center shadow-sm border border-[#F0EBE0] opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      title="分享"
+                    >
+                        <Share2 size={14} />
+                    </button>
                 </div>
              );
           })}
@@ -2558,7 +2639,7 @@ export default function App() {
       {/* Floating Action Button */}
       <button 
         onClick={handleAddItem}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-[#F4D06F] rounded-full shadow-lg flex items-center justify-center text-[#5C4033] hover:bg-[#EAC050] transition-colors"
+        className="fixed bottom-24 right-6 w-14 h-14 bg-[#F4D06F] rounded-full shadow-lg flex items-center justify-center text-[#5C4033] hover:bg-[#EAC050] transition-colors z-30"
       >
         <Plus size={28} />
       </button>
