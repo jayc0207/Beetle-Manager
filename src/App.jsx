@@ -649,7 +649,7 @@ export default function App() {
               ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 資料文字改為粗體
               ctx.fillStyle = '#000000'; // 加深文字顏色確保對比度
               const records = formData.breedingRecords || [];
-              for (let i = 0; i < Math.min(records.length, 5); i++) {
+              for (let i = 0; i < 5; i++) {
                   const rec = records[i];
                   currentY += rowH;
                   ctx.beginPath();
@@ -658,12 +658,15 @@ export default function App() {
                   ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
                   ctx.lineWidth = 2; // 線條加粗
                   ctx.stroke();
-                  ctx.textAlign = 'center';
-                  ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
-                  ctx.fillText(rec.eggs || '-', padding + colWidths[0] + colWidths[1] / 2, currentY + rowH / 2);
-                  ctx.fillText(rec.larvae || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, currentY + rowH / 2);
-                  ctx.textAlign = 'left';
-                  ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, currentY + rowH / 2);
+                  
+                  if (rec) {
+                      ctx.textAlign = 'center';
+                      ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
+                      ctx.fillText(rec.eggs || '-', padding + colWidths[0] + colWidths[1] / 2, currentY + rowH / 2);
+                      ctx.fillText(rec.larvae || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, currentY + rowH / 2);
+                      ctx.textAlign = 'left';
+                      ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, currentY + rowH / 2);
+                  }
               }
 
           } else {
