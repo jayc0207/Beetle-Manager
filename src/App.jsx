@@ -510,59 +510,89 @@ export default function App() {
               ctx.lineWidth = 2;
               ctx.strokeRect(padding, tableStartY, contentW, tableH);
 
-              // 繪製幼蟲表格內容
-              const colWidths = [110, 80, 80, contentW - 270];
-              const headers = ['記錄日期', '階段', '重量(g)', '備註'];
+              // 繪製幼蟲表格內容 (並排 5x2 = 10 筆)
+              const halfW = contentW / 2;
+              const subColWidths = [110, 80, 90]; // 總和 280 (即 halfW)
+              const headers = ['記錄日期', '階段', '重量(g)'];
               let currentY = tableStartY;
               const rowH = 30;
               
+              // 標題底線
               ctx.beginPath();
               ctx.moveTo(padding, currentY + rowH);
               ctx.lineTo(width - padding, currentY + rowH);
-              ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
-              ctx.lineWidth = 2; // 線條加粗
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = 2;
               ctx.stroke();
 
-              let currentX = padding;
-              colWidths.forEach((w, i) => {
-                  if (i > 0) {
-                      ctx.beginPath();
-                      ctx.moveTo(currentX, tableStartY);
-                      ctx.lineTo(currentX, tableStartY + tableH);
-                      ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
-                      ctx.lineWidth = 2; // 線條加粗
-                      ctx.stroke();
-                  }
-                  currentX += w;
+              // 垂直線 (中線與欄位分隔線)
+              ctx.beginPath();
+              ctx.moveTo(padding + halfW, tableStartY);
+              ctx.lineTo(padding + halfW, tableStartY + tableH);
+              ctx.stroke();
+
+              [0, 1].forEach(blockIdx => {
+                  let currentX = padding + blockIdx * halfW;
+                  subColWidths.forEach((w, i) => {
+                      if (i > 0) {
+                          ctx.beginPath();
+                          ctx.moveTo(currentX, tableStartY);
+                          ctx.lineTo(currentX, tableStartY + tableH);
+                          ctx.stroke();
+                      }
+                      currentX += w;
+                  });
               });
 
+              // 繪製標題
               ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
               ctx.fillStyle = '#000000';
               ctx.textAlign = 'center';
-              currentX = padding;
-              headers.forEach((h, i) => {
-                  ctx.fillText(h, currentX + colWidths[i] / 2, currentY + rowH / 2);
-                  currentX += colWidths[i];
+              [0, 1].forEach(blockIdx => {
+                  let currentX = padding + blockIdx * halfW;
+                  headers.forEach((h, i) => {
+                      ctx.fillText(h, currentX + subColWidths[i] / 2, currentY + rowH / 2);
+                      currentX += subColWidths[i];
+                  });
               });
 
-              ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 資料文字改為粗體
-              ctx.fillStyle = '#000000'; // 加深文字顏色確保對比度
+              // 繪製資料
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
               const records = formData.larvaRecords || [];
-              for (let i = 0; i < Math.min(records.length, 5); i++) {
-                  const rec = records[i];
-                  currentY += rowH;
-                  ctx.beginPath();
-                  ctx.moveTo(padding, currentY + rowH);
-                  ctx.lineTo(width - padding, currentY + rowH);
-                  ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
-                  ctx.lineWidth = 2; // 線條加粗
-                  ctx.stroke();
-                  ctx.textAlign = 'center';
-                  ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
-                  ctx.fillText(rec.stage || '-', padding + colWidths[0] + colWidths[1] / 2, currentY + rowH / 2);
-                  ctx.fillText(rec.weight || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, currentY + rowH / 2);
-                  ctx.textAlign = 'left';
-                  ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, currentY + rowH / 2);
+              
+              for (let row = 0; row < 5; row++) {
+                  const rowY = currentY + rowH + row * rowH;
+                  
+                  // 繪製資料橫線 (除了最後一列剛好貼底外，其餘需畫線)
+                  if (row < 4) {
+                      ctx.beginPath();
+                      ctx.moveTo(padding, rowY + rowH);
+                      ctx.lineTo(width - padding, rowY + rowH);
+                      ctx.stroke();
+                  }
+
+                  // 左側資料 (0-4)
+                  const recLeft = records[row];
+                  if (recLeft) {
+                      let cx = padding;
+                      ctx.fillText(recLeft.date || '-', cx + subColWidths[0] / 2, rowY + rowH / 2);
+                      cx += subColWidths[0];
+                      ctx.fillText(recLeft.stage || '-', cx + subColWidths[1] / 2, rowY + rowH / 2);
+                      cx += subColWidths[1];
+                      ctx.fillText(recLeft.weight || '-', cx + subColWidths[2] / 2, rowY + rowH / 2);
+                  }
+
+                  // 右側資料 (5-9)
+                  const recRight = records[row + 5];
+                  if (recRight) {
+                      let cx = padding + halfW;
+                      ctx.fillText(recRight.date || '-', cx + subColWidths[0] / 2, rowY + rowH / 2);
+                      cx += subColWidths[0];
+                      ctx.fillText(recRight.stage || '-', cx + subColWidths[1] / 2, rowY + rowH / 2);
+                      cx += subColWidths[1];
+                      ctx.fillText(recRight.weight || '-', cx + subColWidths[2] / 2, rowY + rowH / 2);
+                  }
               }
 
           } else if (formData.type === 'breeding') {
