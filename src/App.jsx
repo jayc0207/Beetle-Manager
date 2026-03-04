@@ -461,7 +461,7 @@ export default function App() {
           ctx.fillText(formData.name || '未命名', padding, padding + 30);
           
           if (formData.scientificName) {
-            ctx.font = 'italic 18px "Noto Sans TC", sans-serif';
+            ctx.font = 'bold italic 18px "Noto Sans TC", sans-serif';
             ctx.fillStyle = '#555555';
             ctx.fillText(formData.scientificName, padding, padding + 60);
           }
@@ -469,7 +469,7 @@ export default function App() {
           ctx.fillStyle = '#000000';
           ctx.font = 'bold 20px monospace';
           ctx.textAlign = 'right';
-          ctx.fillText(formData.customId || '', width - padding, padding + 30);
+          ctx.fillText(formData.customId || '', width - padding, padding + 60);
     
           const drawInfoRow = (y, label1, val1, label2, val2) => {
             const colW = contentW / 2;
@@ -483,8 +483,8 @@ export default function App() {
             ctx.fillText(val1 || '-', x1 + 100, y); 
             ctx.fillText(val2 || '-', x2 + 100, y);
             ctx.beginPath();
-            ctx.strokeStyle = '#E0E0E0'; 
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+            ctx.lineWidth = 2; // 線條加粗
             ctx.moveTo(x1, y + 15);
             ctx.lineTo(width - padding, y + 15);
             ctx.stroke();
@@ -519,7 +519,8 @@ export default function App() {
               ctx.beginPath();
               ctx.moveTo(padding, currentY + rowH);
               ctx.lineTo(width - padding, currentY + rowH);
-              ctx.strokeStyle = '#000000';
+              ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+              ctx.lineWidth = 2; // 線條加粗
               ctx.stroke();
 
               let currentX = padding;
@@ -528,6 +529,8 @@ export default function App() {
                       ctx.beginPath();
                       ctx.moveTo(currentX, tableStartY);
                       ctx.lineTo(currentX, tableStartY + tableH);
+                      ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+                      ctx.lineWidth = 2; // 線條加粗
                       ctx.stroke();
                   }
                   currentX += w;
@@ -542,8 +545,8 @@ export default function App() {
                   currentX += colWidths[i];
               });
 
-              ctx.font = '14px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#333333';
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 資料文字改為粗體
+              ctx.fillStyle = '#000000'; // 加深文字顏色確保對比度
               const records = formData.larvaRecords || [];
               for (let i = 0; i < Math.min(records.length, 5); i++) {
                   const rec = records[i];
@@ -551,7 +554,8 @@ export default function App() {
                   ctx.beginPath();
                   ctx.moveTo(padding, currentY + rowH);
                   ctx.lineTo(width - padding, currentY + rowH);
-                  ctx.strokeStyle = '#E0E0E0';
+                  ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+                  ctx.lineWidth = 2; // 線條加粗
                   ctx.stroke();
                   ctx.textAlign = 'center';
                   ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
@@ -586,7 +590,8 @@ export default function App() {
               ctx.beginPath();
               ctx.moveTo(padding, currentY + rowH);
               ctx.lineTo(width - padding, currentY + rowH);
-              ctx.strokeStyle = '#000000';
+              ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+              ctx.lineWidth = 2; // 線條加粗
               ctx.stroke();
 
               let currentX = padding;
@@ -595,6 +600,8 @@ export default function App() {
                       ctx.beginPath();
                       ctx.moveTo(currentX, tableStartY);
                       ctx.lineTo(currentX, tableStartY + tableH);
+                      ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+                      ctx.lineWidth = 2; // 線條加粗
                       ctx.stroke();
                   }
                   currentX += w;
@@ -609,8 +616,8 @@ export default function App() {
                   currentX += colWidths[i];
               });
 
-              ctx.font = '14px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#333333';
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 資料文字改為粗體
+              ctx.fillStyle = '#000000'; // 加深文字顏色確保對比度
               const records = formData.breedingRecords || [];
               for (let i = 0; i < Math.min(records.length, 5); i++) {
                   const rec = records[i];
@@ -618,7 +625,8 @@ export default function App() {
                   ctx.beginPath();
                   ctx.moveTo(padding, currentY + rowH);
                   ctx.lineTo(width - padding, currentY + rowH);
-                  ctx.strokeStyle = '#E0E0E0';
+                  ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
+                  ctx.lineWidth = 2; // 線條加粗
                   ctx.stroke();
                   ctx.textAlign = 'center';
                   ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
@@ -646,7 +654,7 @@ export default function App() {
               const tableStartY = infoStartY + (infoRowH * 5) + 10;
               const tableH = height - tableStartY - padding;
               ctx.strokeStyle = '#000000';
-              ctx.lineWidth = 2;
+              ctx.lineWidth = 2; // 外框線條加粗
               ctx.strokeRect(padding, tableStartY, contentW, tableH);
               
               ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
@@ -654,21 +662,43 @@ export default function App() {
               ctx.textAlign = 'left';
               ctx.fillText('備註:', padding + 15, tableStartY + 25);
               
-              ctx.font = '14px "Noto Sans TC", sans-serif';
-              ctx.fillStyle = '#555555';
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 備註文字也改為粗體
+              ctx.fillStyle = '#000000'; // 顏色改為深黑色
               
-              // 去除富文本中的 HTML 標籤
-              const plainMemo = formData.memo ? formData.memo.replace(/<[^>]+>/g, '') : '';
+              // 處理富文本中的真實換行
+              let htmlContent = formData.memo || '';
+              // 將常見的換行或區塊標籤替換為純文字的換行符號
+              htmlContent = htmlContent.replace(/<br\s*[\/]?>/gi, '\n');
+              htmlContent = htmlContent.replace(/<\/div>/gi, '\n');
+              htmlContent = htmlContent.replace(/<\/p>/gi, '\n');
               
-              // 簡單換行處理備註 (每行約 35 個字)
+              const tempDiv = document.createElement('div');
+              tempDiv.innerHTML = htmlContent;
+              const plainMemo = tempDiv.textContent || tempDiv.innerText || '';
+              
+              // 依據換行符號切割段落，並過濾掉連續的空白行
+              const lines = plainMemo.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              
               const charsPerLine = 35;
               let currentLine = 0;
-              for (let i = 0; i < plainMemo.length; i += charsPerLine) {
-                  if (currentLine > 3) break; // 最多顯示 4 行
-                  let lineStr = plainMemo.substring(i, i + charsPerLine);
-                  if (currentLine === 3 && plainMemo.length > i + charsPerLine) lineStr += '...';
-                  ctx.fillText(lineStr, padding + 15, tableStartY + 55 + currentLine * 25);
-                  currentLine++;
+              const maxLines = 4;
+              
+              for (let j = 0; j < lines.length; j++) {
+                  let text = lines[j];
+                  for (let i = 0; i < text.length; i += charsPerLine) {
+                      if (currentLine >= maxLines) break;
+                      
+                      let lineStr = text.substring(i, i + charsPerLine);
+                      
+                      // 檢查是否超出最大行數，需要加上 '...'
+                      if (currentLine === maxLines - 1 && (text.length > i + charsPerLine || j < lines.length - 1)) {
+                          lineStr = lineStr.substring(0, charsPerLine - 3) + '...';
+                      }
+                      
+                      ctx.fillText(lineStr, padding + 15, tableStartY + 55 + currentLine * 25);
+                      currentLine++;
+                  }
+                  if (currentLine >= maxLines) break;
               }
           }
         }
