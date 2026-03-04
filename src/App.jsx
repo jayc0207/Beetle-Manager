@@ -1101,6 +1101,22 @@ export default function App() {
     }
   };
 
+  const handleDuplicate = () => {
+    if (confirm('確定要以此筆資料為基礎，複製新增一筆嗎？')) {
+      setFormData(prev => ({
+        ...prev,
+        id: Date.now().toString(),
+        customId: generateId(),
+        name: prev.name ? `${prev.name} (複製)` : '未命名 (複製)',
+        // 確保陣列進行深拷貝，避免參考到原資料
+        larvaRecords: prev.larvaRecords ? JSON.parse(JSON.stringify(prev.larvaRecords)) : [],
+        breedingRecords: prev.breedingRecords ? JSON.parse(JSON.stringify(prev.breedingRecords)) : [],
+        images: [...(prev.images || [])]
+      }));
+      setEditingItem(null); // 切換為「新增」模式
+    }
+  };
+
   const handleMultiImageUpload = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
@@ -1552,8 +1568,9 @@ export default function App() {
         <div className="flex gap-2">
           {editingItem && (
             <>
+              <Button variant="ghost" className="text-blue-500" onClick={handleDuplicate} title="複製新增"><Copy size={20} /></Button>
               <Button variant="ghost" onClick={() => setShowLabelModal(true)} title="列印標籤"><Printer size={20} /></Button>
-              <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)}><Trash2 size={20} /></Button>
+              <Button variant="ghost" className="text-red-400" onClick={() => handleDelete(editingItem.id)} title="刪除"><Trash2 size={20} /></Button>
             </>
           )}
           <Button variant="primary" onClick={handleSave} className="!px-6" disabled={isLoading}>
