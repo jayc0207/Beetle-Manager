@@ -1382,7 +1382,7 @@ export default function App() {
               <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden">
                   <div className="relative h-64 bg-[#F5F1E8]">
                       {displayImage ? (
-                          <img src={displayImage} alt={item.name} className="w-full h-full object-cover" />
+                          <img src={displayImage} alt={item.name} className="w-full h-full object-cover cursor-pointer" onClick={() => setViewImage(displayImage)} />
                       ) : (
                           <div className="w-full h-full flex items-center justify-center text-[#D6CDBF]"><Bug size={64} /></div>
                       )}
@@ -1442,6 +1442,81 @@ export default function App() {
                         </div>
                       )}
 
+                      {item.type === 'adult' && item.specimenImage && (
+                          <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">標本照</label>
+                              <img src={item.specimenImage} alt="Specimen" className="w-full h-48 object-contain rounded-lg border border-[#E8E1D5] bg-[#F5F1E8] cursor-pointer" onClick={() => setViewImage(item.specimenImage)} />
+                          </div>
+                      )}
+
+                      {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
+                          <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-3 block flex items-center gap-1">
+                                  <Leaf size={14}/> 成長記錄
+                              </label>
+                              <div className="space-y-2">
+                                  <div className="flex text-[10px] text-[#A09383] px-1 gap-1 border-b border-[#F0EBE0] pb-1">
+                                      <div className="w-20">日期</div>
+                                      <div className="w-12 text-center">階段</div>
+                                      <div className="w-12 text-right">重量</div>
+                                      <div className="flex-1 ml-2">備考</div>
+                                  </div>
+                                  {item.larvaRecords.map((record, index) => (
+                                      <div key={index} className="flex text-xs text-[#4A3B32] px-1 py-1 gap-1 border-b border-[#F0EBE0] last:border-0">
+                                          <div className="w-20 truncate">{record.date || '-'}</div>
+                                          <div className="w-12 text-center">{record.stage || '-'}</div>
+                                          <div className="w-12 text-right">{record.weight ? `${record.weight}g` : '-'}</div>
+                                          <div className="flex-1 ml-2 text-gray-500 truncate">{record.memo || '-'}</div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
+                      {item.type === 'larva' && (item.pupationImage || item.emergenceImage) && (
+                          <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-3 block">重要階段記錄照</label>
+                              <div className="grid grid-cols-2 gap-3">
+                                  {item.pupationImage && (
+                                      <div>
+                                          <span className="text-[10px] text-[#A09383] block mb-1">化蛹照</span>
+                                          <img src={item.pupationImage} alt="Pupation" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.pupationImage)} />
+                                      </div>
+                                  )}
+                                  {item.emergenceImage && (
+                                      <div>
+                                          <span className="text-[10px] text-[#A09383] block mb-1">羽化照</span>
+                                          <img src={item.emergenceImage} alt="Emergence" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.emergenceImage)} />
+                                      </div>
+                                  )}
+                              </div>
+                          </div>
+                      )}
+
+                      {item.type === 'breeding' && item.breedingRecords && item.breedingRecords.length > 0 && (
+                          <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
+                              <label className="text-xs font-bold text-[#8B5E3C] mb-3 block flex items-center gap-1">
+                                  <Calendar size={14}/> 產卵管理
+                              </label>
+                              <div className="space-y-2">
+                                  <div className="flex text-[10px] text-[#A09383] px-1 gap-1 border-b border-[#F0EBE0] pb-1">
+                                      <div className="w-20">採收日期</div>
+                                      <div className="w-10 text-center">卵</div>
+                                      <div className="w-10 text-center">蟲</div>
+                                      <div className="flex-1 ml-2">備考</div>
+                                  </div>
+                                  {item.breedingRecords.map((record, index) => (
+                                      <div key={index} className="flex text-xs text-[#4A3B32] px-1 py-1 gap-1 border-b border-[#F0EBE0] last:border-0">
+                                          <div className="w-20 truncate">{record.date || '-'}</div>
+                                          <div className="w-10 text-center">{record.eggs || '-'}</div>
+                                          <div className="w-10 text-center">{record.larvae || '-'}</div>
+                                          <div className="flex-1 ml-2 text-gray-500 truncate">{record.memo || '-'}</div>
+                                      </div>
+                                  ))}
+                              </div>
+                          </div>
+                      )}
+
                       {item.memo && (
                           <div className="bg-[#F5F1E8] p-4 rounded-xl">
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block flex items-center gap-1">
@@ -1456,7 +1531,7 @@ export default function App() {
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">照片記錄</label>
                               <div className="grid grid-cols-3 gap-2">
                                   {item.images.map((img, idx) => (
-                                      <img key={idx} src={img} alt={`Gallery ${idx}`} className="aspect-square object-cover rounded-lg border border-[#E8E1D5]" />
+                                      <img key={idx} src={img} alt={`Gallery ${idx}`} className="aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(img)} />
                                   ))}
                               </div>
                           </div>
