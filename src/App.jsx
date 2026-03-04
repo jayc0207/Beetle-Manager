@@ -437,9 +437,8 @@ export default function App() {
     }
   };
 
-  // --- Effect for Drawing Label (Omitted implementation detail changes here to keep short, but logic remains same) ---
+  // --- Effect for Drawing Label ---
   useEffect(() => {
-      // (保持標籤繪製邏輯不變)
       if (showLabelModal && labelCanvasRef.current && formData) {
           const canvas = labelCanvasRef.current;
           const ctx = canvas.getContext('2d');
@@ -491,7 +490,6 @@ export default function App() {
             ctx.stroke();
           };
     
-          // 繪製下半部邏輯...
           if (formData.type === 'larva') {
               const infoStartY = padding + headerH;
               const infoRowH = 35; 
@@ -511,6 +509,58 @@ export default function App() {
               ctx.strokeStyle = '#000000';
               ctx.lineWidth = 2;
               ctx.strokeRect(padding, tableStartY, contentW, tableH);
+
+              // 繪製幼蟲表格內容
+              const colWidths = [110, 80, 80, contentW - 270];
+              const headers = ['記錄日期', '階段', '重量(g)', '備註'];
+              let currentY = tableStartY;
+              const rowH = 30;
+              
+              ctx.beginPath();
+              ctx.moveTo(padding, currentY + rowH);
+              ctx.lineTo(width - padding, currentY + rowH);
+              ctx.strokeStyle = '#000000';
+              ctx.stroke();
+
+              let currentX = padding;
+              colWidths.forEach((w, i) => {
+                  if (i > 0) {
+                      ctx.beginPath();
+                      ctx.moveTo(currentX, tableStartY);
+                      ctx.lineTo(currentX, tableStartY + tableH);
+                      ctx.stroke();
+                  }
+                  currentX += w;
+              });
+
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              ctx.textAlign = 'center';
+              currentX = padding;
+              headers.forEach((h, i) => {
+                  ctx.fillText(h, currentX + colWidths[i] / 2, currentY + rowH / 2);
+                  currentX += colWidths[i];
+              });
+
+              ctx.font = '14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#333333';
+              const records = formData.larvaRecords || [];
+              for (let i = 0; i < Math.min(records.length, 5); i++) {
+                  const rec = records[i];
+                  currentY += rowH;
+                  ctx.beginPath();
+                  ctx.moveTo(padding, currentY + rowH);
+                  ctx.lineTo(width - padding, currentY + rowH);
+                  ctx.strokeStyle = '#E0E0E0';
+                  ctx.stroke();
+                  ctx.textAlign = 'center';
+                  ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
+                  ctx.fillText(rec.stage || '-', padding + colWidths[0] + colWidths[1] / 2, currentY + rowH / 2);
+                  ctx.fillText(rec.weight || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, currentY + rowH / 2);
+                  ctx.textAlign = 'left';
+                  ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, currentY + rowH / 2);
+              }
+
           } else if (formData.type === 'breeding') {
               const infoStartY = padding + headerH;
               const infoRowH = 35; 
@@ -526,11 +576,100 @@ export default function App() {
               ctx.strokeStyle = '#000000';
               ctx.lineWidth = 2;
               ctx.strokeRect(padding, tableStartY, contentW, tableH);
+
+              // 繪製產卵組表格內容
+              const colWidths = [110, 70, 70, contentW - 250];
+              const headers = ['採收日期', '卵(顆)', '幼蟲(隻)', '備註'];
+              let currentY = tableStartY;
+              const rowH = 30;
+              
+              ctx.beginPath();
+              ctx.moveTo(padding, currentY + rowH);
+              ctx.lineTo(width - padding, currentY + rowH);
+              ctx.strokeStyle = '#000000';
+              ctx.stroke();
+
+              let currentX = padding;
+              colWidths.forEach((w, i) => {
+                  if (i > 0) {
+                      ctx.beginPath();
+                      ctx.moveTo(currentX, tableStartY);
+                      ctx.lineTo(currentX, tableStartY + tableH);
+                      ctx.stroke();
+                  }
+                  currentX += w;
+              });
+
+              ctx.font = 'bold 14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              ctx.textAlign = 'center';
+              currentX = padding;
+              headers.forEach((h, i) => {
+                  ctx.fillText(h, currentX + colWidths[i] / 2, currentY + rowH / 2);
+                  currentX += colWidths[i];
+              });
+
+              ctx.font = '14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#333333';
+              const records = formData.breedingRecords || [];
+              for (let i = 0; i < Math.min(records.length, 5); i++) {
+                  const rec = records[i];
+                  currentY += rowH;
+                  ctx.beginPath();
+                  ctx.moveTo(padding, currentY + rowH);
+                  ctx.lineTo(width - padding, currentY + rowH);
+                  ctx.strokeStyle = '#E0E0E0';
+                  ctx.stroke();
+                  ctx.textAlign = 'center';
+                  ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, currentY + rowH / 2);
+                  ctx.fillText(rec.eggs || '-', padding + colWidths[0] + colWidths[1] / 2, currentY + rowH / 2);
+                  ctx.fillText(rec.larvae || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, currentY + rowH / 2);
+                  ctx.textAlign = 'left';
+                  ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, currentY + rowH / 2);
+              }
+
           } else {
-              const contentH = height - padding * 2;
-              const gridY = padding + headerH;
-              const gridH = contentH - headerH;
-              ctx.strokeRect(padding, gridY, contentW, gridH);
+              // 成蟲排版
+              const infoStartY = padding + headerH;
+              const infoRowH = 35;
+              const genderStr = formData.gender === 'male' ? '♂ 公' : formData.gender === 'female' ? '♀ 母' : '?';
+              const sizeStr = formData.size ? `${formData.size}mm` : '-';
+              const pMale = formData.parentMale ? `${formData.parentMale}mm` : '-';
+              const pFemale = formData.parentFemale ? `${formData.parentFemale}mm` : '-';
+
+              drawInfoRow(infoStartY + 10, '產地:', formData.origin, '血統:', formData.bloodline);
+              drawInfoRow(infoStartY + 10 + infoRowH, '性別:', genderStr, '體長:', sizeStr);
+              drawInfoRow(infoStartY + 10 + infoRowH * 2, '累代:', formData.generation, '羽化:', formData.date);
+              drawInfoRow(infoStartY + 10 + infoRowH * 3, '種親♂:', pMale, '種親♀:', pFemale);
+              drawInfoRow(infoStartY + 10 + infoRowH * 4, '進食:', formData.startFeedingDate || '-', '死亡:', formData.deathDate || '-');
+
+              const tableStartY = infoStartY + (infoRowH * 5) + 10;
+              const tableH = height - tableStartY - padding;
+              ctx.strokeStyle = '#000000';
+              ctx.lineWidth = 2;
+              ctx.strokeRect(padding, tableStartY, contentW, tableH);
+              
+              ctx.font = 'bold 16px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#000000';
+              ctx.textAlign = 'left';
+              ctx.fillText('備註:', padding + 15, tableStartY + 25);
+              
+              ctx.font = '14px "Noto Sans TC", sans-serif';
+              ctx.fillStyle = '#555555';
+              
+              // 去除富文本中的 HTML 標籤
+              const plainMemo = formData.memo ? formData.memo.replace(/<[^>]+>/g, '') : '';
+              
+              // 簡單換行處理備註 (每行約 35 個字)
+              const charsPerLine = 35;
+              let currentLine = 0;
+              for (let i = 0; i < plainMemo.length; i += charsPerLine) {
+                  if (currentLine > 3) break; // 最多顯示 4 行
+                  let lineStr = plainMemo.substring(i, i + charsPerLine);
+                  if (currentLine === 3 && plainMemo.length > i + charsPerLine) lineStr += '...';
+                  ctx.fillText(lineStr, padding + 15, tableStartY + 55 + currentLine * 25);
+                  currentLine++;
+              }
           }
         }
   }, [showLabelModal, formData]);
