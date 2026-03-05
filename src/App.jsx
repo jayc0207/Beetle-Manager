@@ -627,7 +627,7 @@ export default function App() {
               ctx.lineWidth = 2;
               ctx.strokeRect(padding, tableStartY, contentW, tableH);
 
-              // 繪製產卵組表格內容
+              // 繪製產房表格內容
               const colWidths = [110, 70, 70, contentW - 250];
               const headers = ['採收日期', '卵(顆)', '幼蟲(隻)', '備註'];
               const rowH = tableH / 6; // 動態計算行高，均分表格總高度 (標題1 + 資料5)
@@ -1560,7 +1560,7 @@ export default function App() {
                       {item.type === 'breeding' && item.breedingRecords && item.breedingRecords.length > 0 && (
                           <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
                               <label className="text-xs font-bold text-[#8B5E3C] mb-3 block flex items-center gap-1">
-                                  <Calendar size={14}/> 產卵管理
+                                  <Calendar size={14}/> 產房管理
                               </label>
                               <div className="space-y-2">
                                   <div className="flex text-[10px] text-[#A09383] px-1 gap-1 border-b border-[#F0EBE0] pb-1">
@@ -1611,7 +1611,7 @@ export default function App() {
     <div className="px-5 pb-24 bg-[#FDFBF7] min-h-screen">
       <div className="flex justify-between items-center py-4 mb-4">
         <h2 className="text-xl font-bold text-[#4A3B32]">
-          {editingItem ? '編輯資料' : `新增${activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產卵組'}`}
+          {editingItem ? '編輯資料' : `新增${activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產房'}`}
         </h2>
         <div className="flex gap-2">
           {editingItem && (
@@ -1724,7 +1724,7 @@ export default function App() {
 
         {formData.type === 'breeding' && (
           <div className="bg-white p-4 rounded-xl border border-[#F0EBE0] space-y-4 mb-4">
-            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1"><Calendar size={14} /> 產卵管理</h3>
+            <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1"><Calendar size={14} /> 產房管理</h3>
             <div className="space-y-4">
                <div className="space-y-2 mb-4">
                     <div className="flex text-xs text-[#A09383] px-1 gap-1">
@@ -1905,7 +1905,7 @@ export default function App() {
       {view === 'list' && (
         <div className="flex justify-between items-start sm:items-end mt-4 ml-1">
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <h1 className="text-2xl font-bold text-[#4A3B32]">{activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : activeTab === 'breeding' ? '產卵組' : '設定'}</h1>
+                <h1 className="text-2xl font-bold text-[#4A3B32]">{activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : activeTab === 'breeding' ? '產房' : '設定'}</h1>
                 
                 {activeTab === 'adult' && (
                     <div className="flex items-center gap-2">
@@ -1954,7 +1954,7 @@ export default function App() {
       {[
         { id: 'adult', label: '成蟲', icon: <Bug size={24} /> },
         { id: 'larva', label: '幼蟲', icon: <Leaf size={24} /> },
-        { id: 'breeding', label: '產卵組', icon: <Calendar size={24} /> },
+        { id: 'breeding', label: '產房', icon: <Calendar size={24} /> },
         { id: 'settings', label: '設定', icon: <Settings size={24} /> },
       ].map((tab) => (
         <button key={tab.id} onClick={() => { setActiveTab(tab.id); setView('list'); }} className={`flex flex-col items-center gap-1 ${activeTab === tab.id ? 'text-[#8B5E3C]' : 'text-[#C5BDB0]'}`}>
@@ -1970,7 +1970,7 @@ export default function App() {
       <div className="w-24 h-24 rounded-full bg-[#F5F1E8] flex items-center justify-center mb-4">
         {activeTab === 'adult' && <Bug size={40} className="text-[#D6CDBF]" />}{activeTab === 'larva' && <Leaf size={40} className="text-[#D6CDBF]" />}{activeTab === 'breeding' && <Calendar size={40} className="text-[#D6CDBF]" />}
       </div>
-      <p>目前沒有{activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產卵組'}資料</p>
+      <p>目前沒有{activeTab === 'adult' ? '成蟲' : activeTab === 'larva' ? '幼蟲' : '產房'}資料</p>
     </div>
   );
 
