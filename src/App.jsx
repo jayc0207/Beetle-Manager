@@ -470,8 +470,8 @@ export default function App() {
           ctx.fillStyle = '#000000';
           ctx.font = 'bold 36px "Noto Sans TC", sans-serif';
           ctx.textAlign = 'left';
-          // 名稱加上截斷 (保留空間給右側 ID)
-          ctx.fillText(truncateText(ctx, formData.name || '未命名', contentW - 200), padding, padding + 30);
+          // 名稱使用最大寬度 contentW (因為這行高度沒有其他元素干擾)
+          ctx.fillText(truncateText(ctx, formData.name || '未命名', contentW), padding, padding + 30);
           
           if (formData.scientificName) {
             ctx.font = 'bold italic 18px "Noto Sans TC", sans-serif';
@@ -717,6 +717,14 @@ export default function App() {
               ctx.textAlign = 'left';
               ctx.fillText('備註:', padding + 15, tableStartY + 25);
               
+              // 在中間畫一條淡淡的垂直分隔線來區分左右兩欄備註
+              ctx.beginPath();
+              ctx.moveTo(padding + contentW / 2, tableStartY + 40);
+              ctx.lineTo(padding + contentW / 2, tableStartY + tableH - 10);
+              ctx.strokeStyle = '#D6CDBF'; // 較淡的顏色
+              ctx.lineWidth = 1;
+              ctx.stroke();
+
               ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 備註文字也改為粗體
               ctx.fillStyle = '#000000'; // 顏色改為深黑色
               
@@ -736,7 +744,8 @@ export default function App() {
               // 依據換行符號切割段落，並過濾掉連續的空白行
               const paragraphs = plainMemo.split('\n').map(l => l.trim()).filter(l => l.length > 0);
               
-              const maxMemoW = contentW - 30; // 左右各留 15px 邊距
+              // 雙欄排版的單欄容許寬度 (一半寬度減去左右 padding)
+              const memoColW = contentW / 2 - 30; 
               let linesToDraw = [];
               
               // 依據字寬自動折行計算
@@ -745,7 +754,7 @@ export default function App() {
                   for (let i = 0; i < p.length; i++) {
                       const char = p[i];
                       const testLine = currentLine + char;
-                      if (ctx.measureText(testLine).width > maxMemoW && currentLine !== '') {
+                      if (ctx.measureText(testLine).width > memoColW && currentLine !== '') {
                           linesToDraw.push(currentLine);
                           currentLine = char;
                       } else {
@@ -753,18 +762,29 @@ export default function App() {
                       }
                   }
                   if (currentLine) {
-                      linesToDraw.push(currentLine);
+                          linesToDraw.push(currentLine);
                   }
               }
               
-              const maxLines = 4;
-              for (let i = 0; i < Math.min(linesToDraw.length, maxLines); i++) {
+              const maxLinesPerCol = 4;
+              const maxTotalLines = maxLinesPerCol * 2; // 左右兩欄總計 8 行
+              
+              for (let i = 0; i < Math.min(linesToDraw.length, maxTotalLines); i++) {
                   let lineStr = linesToDraw[i];
+                  
                   // 如果到了最後一行但後面還有文字，強制加上 ... 截斷
-                  if (i === maxLines - 1 && linesToDraw.length > maxLines) {
-                      lineStr = truncateText(ctx, lineStr + '...', maxMemoW);
+                  if (i === maxTotalLines - 1 && linesToDraw.length > maxTotalLines) {
+                      lineStr = truncateText(ctx, lineStr + '...', memoColW);
                   }
-                  ctx.fillText(lineStr, padding + 15, tableStartY + 55 + i * 25);
+                  
+                  // 計算該列印在左欄還是右欄
+                  const colIdx = Math.floor(i / maxLinesPerCol); // 0 代表左欄, 1 代表右欄
+                  const rowIdx = i % maxLinesPerCol; // 0 到 3 (代表第幾行)
+                  
+                  const xPos = padding + 15 + (colIdx * (contentW / 2));
+                  const yPos = tableStartY + 55 + rowIdx * 25;
+                  
+                  ctx.fillText(lineStr, xPos, yPos);
               }
           }
         }
