@@ -450,6 +450,18 @@ export default function App() {
           ctx.strokeStyle = '#000000';
           ctx.lineWidth = 2;
           ctx.textBaseline = 'middle';
+
+          // 截斷過長文字的 Helper 函數
+          const truncateText = (context, text, maxWidth) => {
+              if (!text) return '';
+              let str = String(text);
+              if (context.measureText(str).width <= maxWidth) return str;
+              let truncated = str;
+              while (truncated.length > 0 && context.measureText(truncated + '...').width > maxWidth) {
+                  truncated = truncated.slice(0, -1);
+              }
+              return truncated + '...';
+          };
     
           const padding = 20;
           const contentW = width - padding * 2;
@@ -458,12 +470,13 @@ export default function App() {
           ctx.fillStyle = '#000000';
           ctx.font = 'bold 36px "Noto Sans TC", sans-serif';
           ctx.textAlign = 'left';
-          ctx.fillText(formData.name || '未命名', padding, padding + 30);
+          // 名稱加上截斷 (保留空間給右側 ID)
+          ctx.fillText(truncateText(ctx, formData.name || '未命名', contentW - 200), padding, padding + 30);
           
           if (formData.scientificName) {
             ctx.font = 'bold italic 18px "Noto Sans TC", sans-serif';
             ctx.fillStyle = '#555555';
-            ctx.fillText(formData.scientificName, padding, padding + 60);
+            ctx.fillText(truncateText(ctx, formData.scientificName, contentW - 200), padding, padding + 60);
           }
     
           ctx.fillStyle = '#000000';
@@ -480,8 +493,12 @@ export default function App() {
             ctx.textAlign = 'left';
             ctx.fillText(label1, x1, y);
             ctx.fillText(label2, x2, y);
-            ctx.fillText(val1 || '-', x1 + 100, y); 
-            ctx.fillText(val2 || '-', x2 + 100, y);
+
+            // 計算數值的最大容許寬度
+            const maxValW = colW - 110;
+            ctx.fillText(truncateText(ctx, val1 || '-', maxValW), x1 + 100, y); 
+            ctx.fillText(truncateText(ctx, val2 || '-', maxValW), x2 + 100, y);
+            
             ctx.beginPath();
             ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
             ctx.lineWidth = 2; // 線條加粗
@@ -575,22 +592,22 @@ export default function App() {
                   const recLeft = records[row];
                   if (recLeft) {
                       let cx = padding;
-                      ctx.fillText(recLeft.date || '-', cx + subColWidths[0] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recLeft.date || '-', subColWidths[0] - 10), cx + subColWidths[0] / 2, rowY + rowH / 2);
                       cx += subColWidths[0];
-                      ctx.fillText(recLeft.stage || '-', cx + subColWidths[1] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recLeft.stage || '-', subColWidths[1] - 10), cx + subColWidths[1] / 2, rowY + rowH / 2);
                       cx += subColWidths[1];
-                      ctx.fillText(recLeft.weight || '-', cx + subColWidths[2] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recLeft.weight || '-', subColWidths[2] - 10), cx + subColWidths[2] / 2, rowY + rowH / 2);
                   }
 
                   // 右側資料 (5-9)
                   const recRight = records[row + 5];
                   if (recRight) {
                       let cx = padding + halfW;
-                      ctx.fillText(recRight.date || '-', cx + subColWidths[0] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recRight.date || '-', subColWidths[0] - 10), cx + subColWidths[0] / 2, rowY + rowH / 2);
                       cx += subColWidths[0];
-                      ctx.fillText(recRight.stage || '-', cx + subColWidths[1] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recRight.stage || '-', subColWidths[1] - 10), cx + subColWidths[1] / 2, rowY + rowH / 2);
                       cx += subColWidths[1];
-                      ctx.fillText(recRight.weight || '-', cx + subColWidths[2] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, recRight.weight || '-', subColWidths[2] - 10), cx + subColWidths[2] / 2, rowY + rowH / 2);
                   }
               }
 
@@ -666,11 +683,11 @@ export default function App() {
                   
                   if (rec) {
                       ctx.textAlign = 'center';
-                      ctx.fillText(rec.date || '-', padding + colWidths[0] / 2, rowY + rowH / 2);
-                      ctx.fillText(rec.eggs || '-', padding + colWidths[0] + colWidths[1] / 2, rowY + rowH / 2);
-                      ctx.fillText(rec.larvae || '-', padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, rec.date || '-', colWidths[0] - 10), padding + colWidths[0] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, rec.eggs || '-', colWidths[1] - 10), padding + colWidths[0] + colWidths[1] / 2, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, rec.larvae || '-', colWidths[2] - 10), padding + colWidths[0] + colWidths[1] + colWidths[2] / 2, rowY + rowH / 2);
                       ctx.textAlign = 'left';
-                      ctx.fillText((rec.memo || '').substring(0, 15), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, rowY + rowH / 2);
+                      ctx.fillText(truncateText(ctx, rec.memo || '', colWidths[3] - 20), padding + colWidths[0] + colWidths[1] + colWidths[2] + 10, rowY + rowH / 2);
                   }
               }
 
@@ -703,40 +720,51 @@ export default function App() {
               ctx.font = 'bold 14px "Noto Sans TC", sans-serif'; // 備註文字也改為粗體
               ctx.fillStyle = '#000000'; // 顏色改為深黑色
               
-              // 處理富文本中的真實換行
+              // 處理富文本中的真實換行與格式
               let htmlContent = formData.memo || '';
               // 將常見的換行或區塊標籤替換為純文字的換行符號
               htmlContent = htmlContent.replace(/<br\s*[\/]?>/gi, '\n');
-              htmlContent = htmlContent.replace(/<\/div>/gi, '\n');
               htmlContent = htmlContent.replace(/<\/p>/gi, '\n');
+              htmlContent = htmlContent.replace(/<\/div>/gi, '\n');
+              htmlContent = htmlContent.replace(/<[^>]*>?/gm, ''); // 移除剩餘 HTML 標籤
               
-              const tempDiv = document.createElement('div');
-              tempDiv.innerHTML = htmlContent;
-              const plainMemo = tempDiv.textContent || tempDiv.innerText || '';
+              // 處理 HTML Entity (例如 &nbsp;)
+              const tempTextarea = document.createElement('textarea');
+              tempTextarea.innerHTML = htmlContent;
+              const plainMemo = tempTextarea.value;
               
               // 依據換行符號切割段落，並過濾掉連續的空白行
-              const lines = plainMemo.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+              const paragraphs = plainMemo.split('\n').map(l => l.trim()).filter(l => l.length > 0);
               
-              const charsPerLine = 35;
-              let currentLine = 0;
-              const maxLines = 4;
+              const maxMemoW = contentW - 30; // 左右各留 15px 邊距
+              let linesToDraw = [];
               
-              for (let j = 0; j < lines.length; j++) {
-                  let text = lines[j];
-                  for (let i = 0; i < text.length; i += charsPerLine) {
-                      if (currentLine >= maxLines) break;
-                      
-                      let lineStr = text.substring(i, i + charsPerLine);
-                      
-                      // 檢查是否超出最大行數，需要加上 '...'
-                      if (currentLine === maxLines - 1 && (text.length > i + charsPerLine || j < lines.length - 1)) {
-                          lineStr = lineStr.substring(0, charsPerLine - 3) + '...';
+              // 依據字寬自動折行計算
+              for (const p of paragraphs) {
+                  let currentLine = '';
+                  for (let i = 0; i < p.length; i++) {
+                      const char = p[i];
+                      const testLine = currentLine + char;
+                      if (ctx.measureText(testLine).width > maxMemoW && currentLine !== '') {
+                          linesToDraw.push(currentLine);
+                          currentLine = char;
+                      } else {
+                          currentLine = testLine;
                       }
-                      
-                      ctx.fillText(lineStr, padding + 15, tableStartY + 55 + currentLine * 25);
-                      currentLine++;
                   }
-                  if (currentLine >= maxLines) break;
+                  if (currentLine) {
+                      linesToDraw.push(currentLine);
+                  }
+              }
+              
+              const maxLines = 4;
+              for (let i = 0; i < Math.min(linesToDraw.length, maxLines); i++) {
+                  let lineStr = linesToDraw[i];
+                  // 如果到了最後一行但後面還有文字，強制加上 ... 截斷
+                  if (i === maxLines - 1 && linesToDraw.length > maxLines) {
+                      lineStr = truncateText(ctx, lineStr + '...', maxMemoW);
+                  }
+                  ctx.fillText(lineStr, padding + 15, tableStartY + 55 + i * 25);
               }
           }
         }
