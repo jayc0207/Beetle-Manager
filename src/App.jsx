@@ -338,8 +338,7 @@ export default function App() {
     generation: '', memo: '', acquisitionDate: '', startFeedingDate: '',
     deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
     emergenceImage: null, images: [], image: null, status: 'active',
-    larvaRecords: [], breedingRecords: [], expectedHatchDate: '',
-    enableEmailNotify: false, id: ''
+    larvaRecords: [], breedingRecords: [], expectedHatchDate: '', id: ''
   });
 
   // --- Initialization & Google Integration Logic ---
@@ -1105,7 +1104,7 @@ export default function App() {
       parentMale: '', parentFemale: '', generation: '', memo: '', acquisitionDate: '',
       startFeedingDate: '', deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
       emergenceImage: null, images: [], image: null, status: 'active', larvaRecords: [],
-      breedingRecords: [], expectedHatchDate: '', enableEmailNotify: false, id: Date.now().toString()
+      breedingRecords: [], expectedHatchDate: '', id: Date.now().toString()
     });
     setEditingItem(null);
     setView('form');
@@ -1119,8 +1118,7 @@ export default function App() {
         scientificName: item.scientificName || '', bloodline: item.bloodline || '',
         images: initImages, image: item.image || (initImages.length > 0 ? initImages[0] : null),
         larvaRecords: item.larvaRecords || [], breedingRecords: item.breedingRecords || [], 
-        expectedHatchDate: item.expectedHatchDate || '', closeDate: item.closeDate || '',
-        enableEmailNotify: item.enableEmailNotify || false
+        expectedHatchDate: item.expectedHatchDate || '', closeDate: item.closeDate || ''
     });
     setEditingItem(item);
     setView('form');
@@ -1283,6 +1281,13 @@ export default function App() {
       if (valA > valB) return sortOrder === 'asc' ? 1 : -1;
       return 0;
   });
+
+  // 計算預計孵化名單 (僅針對產房且未關閉的資料)
+  const upcomingHatches = data.filter(item => 
+      item.type === 'breeding' && 
+      item.expectedHatchDate && 
+      !item.closeDate
+  ).sort((a, b) => new Date(a.expectedHatchDate) - new Date(b.expectedHatchDate));
 
   const renderImageViewer = () => {
       if (!viewImage) return null;
@@ -1746,16 +1751,6 @@ export default function App() {
                <InputGroup label="預計孵化日">
                  <input type="date" value={formData.expectedHatchDate} onChange={e => setFormData({...formData, expectedHatchDate: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
                </InputGroup>
-
-               <div className="flex items-center justify-between bg-[#FDFBF7] p-3 rounded-lg border border-[#F0EBE0]">
-                  <div className="flex items-center gap-2">
-                     <div className={`p-2 rounded-full ${formData.enableEmailNotify ? 'bg-[#F4D06F] text-[#5C4033]' : 'bg-[#E8E1D5] text-[#A09383]'}`}><Bell size={18} /></div>
-                     <div className="flex flex-col"><span className="text-sm font-bold text-[#5C4033]">電子郵件通知</span><span className="text-[10px] text-[#A09383]">將在日期接近時發送提醒</span></div>
-                  </div>
-                  <button onClick={() => setFormData({...formData, enableEmailNotify: !formData.enableEmailNotify})} className={`w-12 h-6 rounded-full p-1 transition-colors duration-200 ${formData.enableEmailNotify ? 'bg-[#8B5E3C]' : 'bg-[#D6CDBF]'}`}>
-                     <div className={`w-4 h-4 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${formData.enableEmailNotify ? 'translate-x-6' : 'translate-x-0'}`} />
-                  </button>
-               </div>
             </div>
           </div>
         )}
@@ -2122,6 +2117,58 @@ export default function App() {
            )}
         </div>
       </div>
+
+      {isSignedIn && (
+          <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden mb-4">
+              <div className="p-4 border-b border-[#F0EBE0] bg-[#FDFBF7]">
+                 <h3 className="font-bold text-[#8B5E3C] flex items-center gap-2"><Bell size={18} /> 預計孵化提醒</h3>
+              </div>
+              <div className="p-4">
+                 {upcomingHatches.length === 0 ? (
+                     <p className="text-sm text-[#A09383] text-center py-2">目前沒有即將孵化的產房</p>
+                 ) : (
+                     <div className="space-y-3">
+                         {upcomingHatches.map(item => {
+                             const today = new Date();
+                             today.setHours(0,0,0,0);
+                             const hatchDate = new Date(item.expectedHatchDate);
+                             hatchDate.setHours(0,0,0,0);
+                             const diffTime = hatchDate - today;
+                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                             
+                             let statusText = '';
+                             let statusColor = '';
+                             if (diffDays > 0) {
+                                 statusText = `還剩 ${diffDays} 天`;
+                                 statusColor = 'text-blue-600 bg-blue-50 border-blue-200';
+                             } else if (diffDays === 0) {
+                                 statusText = '就是今天！';
+                                 statusColor = 'text-orange-600 bg-orange-50 border-orange-200';
+                             } else {
+                                 statusText = `已過 ${Math.abs(diffDays)} 天`;
+                                 statusColor = 'text-red-600 bg-red-50 border-red-200';
+                             }
+
+                             return (
+                                 <div key={item.id} 
+                                      onClick={() => { setActiveTab('breeding'); handleEditItem(item); }}
+                                      className="flex items-center justify-between p-3 rounded-xl border border-[#F0EBE0] hover:bg-[#FDFBF7] cursor-pointer transition-colors active:scale-[0.98]">
+                                     <div className="flex flex-col overflow-hidden mr-2">
+                                         <h4 className="font-bold text-[#4A3B32] text-sm truncate">{item.name || '未命名'}</h4>
+                                         <p className="text-xs text-[#A09383]">{item.expectedHatchDate}</p>
+                                     </div>
+                                     <div className={`px-2 py-1 rounded-md text-[10px] font-bold border whitespace-nowrap ${statusColor}`}>
+                                         {statusText}
+                                     </div>
+                                     <ChevronRight size={16} className="text-[#D6CDBF] ml-2 flex-shrink-0" />
+                                 </div>
+                             );
+                         })}
+                     </div>
+                 )}
+              </div>
+          </div>
+      )}
 
       <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden mb-4">
         <div className="p-4 border-b border-[#F0EBE0] bg-[#FDFBF7]">
