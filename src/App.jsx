@@ -2144,7 +2144,7 @@ export default function App() {
              const showSpecimen = isDeadAdult && item.specimenImage;
              const isLarvaEmergedOrDead = item.type === 'larva' && item.larvaRecords && item.larvaRecords.some(r => r.stage === '羽化' || r.stage === '死亡');
              const isBreedingClosed = item.type === 'breeding' && !!item.closeDate;
-             const applyGrayscale = showSpecimen || isLarvaEmergedOrDead || isBreedingClosed;
+             const applyGrayscale = isDeadAdult || isLarvaEmergedOrDead || isBreedingClosed;
 
              let displayImage = item.image || (item.images && item.images[0]);
              if (showSpecimen) displayImage = item.specimenImage;
