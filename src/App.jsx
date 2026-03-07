@@ -85,15 +85,15 @@ const decodeShareData = (str) => {
   }
 };
 
-// --- Helper: Fix Safari broken images (Migrate thumbnail to uc?export=view) ---
+// --- Helper: Fix Safari broken images (Migrate back to thumbnail format) ---
 const fixDriveUrl = (item) => {
     if (!item) return item;
     const fixUrl = (url) => {
-        // 尋找舊版的 thumbnail 網址，將其轉換為不需要 Cookie 的公開網址格式
-        if (typeof url === 'string' && url.includes('drive.google.com/thumbnail') && url.includes('id=')) {
-            const match = url.match(/id=([^&]+)/);
-            if (match && match[1]) {
-                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+        if (typeof url === 'string') {
+            const idMatch = url.match(/id=([^&]+)/);
+            if (idMatch && url.includes('drive.google.com')) {
+                // 統一轉回標準 thumbnail 格式，後續交由 DriveImage 處理抓取
+                return `https://drive.google.com/thumbnail?sz=w1024&id=${idMatch[1]}`;
             }
         }
         return url;
@@ -165,6 +165,73 @@ const fetchPublicSheetData = async (sheetId, targetItemId) => {
         console.error("Fetch sheet error", e);
         return null;
     }
+};
+
+// --- Custom Image Component (Bypasses Safari ITP by fetching via API) ---
+const DriveImage = ({ src, alt, className, onClick }) => {
+  const [imgSrc, setImgSrc] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!src) {
+      if (isMounted) setLoading(false);
+      return;
+    }
+
+    const idMatch = src.match(/id=([^&]+)/);
+    if (!src.includes('drive.google.com') || !idMatch) {
+      if (isMounted) {
+         setImgSrc(src);
+         setLoading(false);
+      }
+      return;
+    }
+
+    const fileId = idMatch[1];
+    const token = window.gapi?.client?.getToken()?.access_token;
+
+    if (token) {
+      // 授權模式：透過 API 以 Blob 下載，100% 避開 Safari Cookie 阻擋問題
+      fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      .then(res => {
+        if (!res.ok) throw new Error('Fetch failed');
+        return res.blob();
+      })
+      .then(blob => {
+        if (isMounted) {
+          setImgSrc(URL.createObjectURL(blob));
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          // 發生錯誤時退回公開免 Cookie 的 lh3 網域
+          setImgSrc(`https://lh3.googleusercontent.com/d/${fileId}`);
+          setLoading(false);
+        }
+      });
+    } else {
+      // 訪客模式：直接使用免 Cookie 的 lh3 網域
+      setImgSrc(`https://lh3.googleusercontent.com/d/${fileId}`);
+      setLoading(false);
+    }
+
+    return () => { isMounted = false; };
+  }, [src]);
+
+  if (!src) return null;
+
+  return (
+    <img 
+      src={imgSrc || src} 
+      alt={alt} 
+      className={`${className} ${loading ? 'animate-pulse bg-[#E8E1D5]' : ''}`} 
+      onClick={onClick} 
+    />
+  );
 };
 
 // --- UI Components ---
@@ -962,8 +1029,8 @@ export default function App() {
     const result = await response.json();
     if (result.error) throw result.error;
     
-    // 使用 uc?export=view 格式，取代原本需要 Cookie 的 thumbnail 連結
-    return `https://drive.google.com/uc?export=view&id=${result.id}`;
+    // 改回 thumbnail 格式，由 DriveImage 組件決定如何顯示
+    return `https://drive.google.com/thumbnail?sz=w1024&id=${result.id}`;
   };
 
   const syncWithGoogleSheets = async () => {
@@ -1387,7 +1454,7 @@ export default function App() {
       return (
           <div className="fixed inset-0 z-50 bg-black bg-opacity-95 flex items-center justify-center p-4" onClick={() => setViewImage(null)}>
               <button onClick={() => setViewImage(null)} className="absolute top-4 right-4 text-white p-2"><X size={32} /></button>
-              <img src={viewImage} alt="Full view" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
+              <DriveImage src={viewImage} alt="Full view" className="max-w-full max-h-full object-contain" onClick={(e) => e.stopPropagation()} />
           </div>
       );
   };
@@ -1544,7 +1611,7 @@ export default function App() {
               <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden">
                   <div className="relative h-64 bg-[#F5F1E8]">
                       {displayImage ? (
-                          <img src={displayImage} alt={item.name} className="w-full h-full object-cover cursor-pointer" onClick={() => setViewImage(displayImage)} />
+                          <DriveImage src={displayImage} alt={item.name} className="w-full h-full object-cover cursor-pointer" onClick={() => setViewImage(displayImage)} />
                       ) : (
                           <div className="w-full h-full flex items-center justify-center text-[#D6CDBF]"><Bug size={64} /></div>
                       )}
@@ -1607,7 +1674,7 @@ export default function App() {
                       {item.type === 'adult' && item.specimenImage && (
                           <div className="bg-[#FDFBF7] p-4 rounded-xl border border-[#F0EBE0]">
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">標本照</label>
-                              <img src={item.specimenImage} alt="Specimen" className="w-full h-48 object-contain rounded-lg border border-[#E8E1D5] bg-[#F5F1E8] cursor-pointer" onClick={() => setViewImage(item.specimenImage)} />
+                              <DriveImage src={item.specimenImage} alt="Specimen" className="w-full h-48 object-contain rounded-lg border border-[#E8E1D5] bg-[#F5F1E8] cursor-pointer" onClick={() => setViewImage(item.specimenImage)} />
                           </div>
                       )}
 
@@ -1642,13 +1709,13 @@ export default function App() {
                                   {item.pupationImage && (
                                       <div>
                                           <span className="text-[10px] text-[#A09383] block mb-1">化蛹照</span>
-                                          <img src={item.pupationImage} alt="Pupation" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.pupationImage)} />
+                                          <DriveImage src={item.pupationImage} alt="Pupation" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.pupationImage)} />
                                       </div>
                                   )}
                                   {item.emergenceImage && (
                                       <div>
                                           <span className="text-[10px] text-[#A09383] block mb-1">羽化照</span>
-                                          <img src={item.emergenceImage} alt="Emergence" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.emergenceImage)} />
+                                          <DriveImage src={item.emergenceImage} alt="Emergence" className="w-full aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(item.emergenceImage)} />
                                       </div>
                                   )}
                               </div>
@@ -1693,7 +1760,7 @@ export default function App() {
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">照片記錄</label>
                               <div className="grid grid-cols-3 gap-2">
                                   {item.images.map((img, idx) => (
-                                      <img key={idx} src={img} alt={`Gallery ${idx}`} className="aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(img)} />
+                                      <DriveImage key={idx} src={img} alt={`Gallery ${idx}`} className="aspect-square object-cover rounded-lg border border-[#E8E1D5] cursor-pointer" onClick={() => setViewImage(img)} />
                                   ))}
                               </div>
                           </div>
@@ -1788,7 +1855,7 @@ export default function App() {
           <div className="grid grid-cols-3 gap-2 mb-2">
              {formData.images && formData.images.map((img, index) => (
                  <div key={index} className="aspect-square rounded-lg overflow-hidden relative group bg-white border border-[#E8E1D5]">
-                     <img src={img} alt={`Record ${index}`} className="w-full h-full object-cover cursor-pointer hover:opacity-90" onClick={() => setViewImage(img)} />
+                     <DriveImage src={img} alt={`Record ${index}`} className="w-full h-full object-cover cursor-pointer hover:opacity-90" onClick={() => setViewImage(img)} />
                      <button onClick={(e) => { e.stopPropagation(); setCoverImage(img); }} className={`absolute top-1 right-1 p-1 rounded-full shadow-sm transition-all ${formData.image === img ? 'bg-white text-red-500 opacity-100' : 'bg-black/30 text-white opacity-0 group-hover:opacity-100 hover:bg-white hover:text-red-500'}`}>
                          <Heart size={14} fill={formData.image === img ? "currentColor" : "none"} />
                      </button>
@@ -1878,7 +1945,7 @@ export default function App() {
                             <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-black/5 h-64 relative">
                                 {formData.pupationImage ? (
                                     <>
-                                        <img src={formData.pupationImage} alt="Pupation" className="w-full h-full object-contain rounded-lg cursor-pointer" onClick={() => setViewImage(formData.pupationImage)} />
+                                        <DriveImage src={formData.pupationImage} alt="Pupation" className="w-full h-full object-contain rounded-lg cursor-pointer" onClick={() => setViewImage(formData.pupationImage)} />
                                         <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, pupationImage: null}); }} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"><X size={14} /></button>
                                     </>
                                 ) : (
@@ -1894,7 +1961,7 @@ export default function App() {
                              <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-2 flex flex-col items-center justify-center bg-black/5 h-64 relative">
                                 {formData.emergenceImage ? (
                                     <>
-                                        <img src={formData.emergenceImage} alt="Emergence" className="w-full h-full object-contain rounded-lg cursor-pointer" onClick={() => setViewImage(formData.emergenceImage)} />
+                                        <DriveImage src={formData.emergenceImage} alt="Emergence" className="w-full h-full object-contain rounded-lg cursor-pointer" onClick={() => setViewImage(formData.emergenceImage)} />
                                         <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, emergenceImage: null}); }} className="absolute top-1 right-1 bg-white rounded-full p-1 shadow-md scale-75"><X size={14} /></button>
                                     </>
                                 ) : (
@@ -1933,7 +2000,7 @@ export default function App() {
                 <div className="border-2 border-dashed border-[#D6CDBF] rounded-xl p-4 flex flex-col items-center justify-center bg-[#FDFBF7] min-h-[120px]">
                     {formData.specimenImage ? (
                     <div className="relative w-full h-32">
-                        <img src={formData.specimenImage} alt="Specimen" className="w-full h-full object-contain rounded-lg opacity-80 cursor-pointer" onClick={() => setViewImage(formData.specimenImage)} />
+                        <DriveImage src={formData.specimenImage} alt="Specimen" className="w-full h-full object-contain rounded-lg opacity-80 cursor-pointer" onClick={() => setViewImage(formData.specimenImage)} />
                         <button onClick={(e) => { e.stopPropagation(); setFormData({...formData, specimenImage: null}); }} className="absolute top-2 right-2 bg-white rounded-full p-1 shadow-md"><X size={14} /></button>
                     </div>
                     ) : (
@@ -2092,7 +2159,7 @@ export default function App() {
              return listDisplayMode === 'grid' ? (
                 <div key={item.id} onClick={() => handleEditItem(item)} className="bg-white p-2 rounded-xl shadow-sm border border-[#F0EBE0] flex flex-col gap-2 active:scale-[0.98] transition-transform relative overflow-hidden group cursor-pointer">
                     <div className={`w-full aspect-square bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
-                        {displayImage ? ( <img src={displayImage} alt={item.name} className="w-full h-full object-cover" /> ) : ( <Bug className="text-[#D6CDBF]" size={32} /> )}
+                        {displayImage ? ( <DriveImage src={displayImage} alt={item.name} className="w-full h-full object-cover" /> ) : ( <Bug className="text-[#D6CDBF]" size={32} /> )}
                         <div className="absolute bottom-1 right-1 flex flex-col items-end gap-1">
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 text-white shadow-sm font-mono backdrop-blur-sm">{item.generation || 'CB'}</span>
                         </div>
@@ -2126,7 +2193,7 @@ export default function App() {
              ) : (
                 <div key={item.id} onClick={() => handleEditItem(item)} className="bg-white p-4 rounded-xl shadow-sm border border-[#F0EBE0] flex gap-4 active:scale-[0.98] transition-transform relative overflow-hidden group cursor-pointer">
                     <div className={`w-16 h-16 bg-[#F5F1E8] rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center relative ${applyGrayscale ? 'grayscale opacity-80' : ''}`}>
-                        {displayImage ? (<img src={displayImage} alt={item.name} className="w-full h-full object-cover" />) : (<Bug className="text-[#D6CDBF]" />)}
+                        {displayImage ? (<DriveImage src={displayImage} alt={item.name} className="w-full h-full object-cover" />) : (<Bug className="text-[#D6CDBF]" />)}
                     </div>
                     <div className="flex-1 overflow-hidden">
                         <div className="flex justify-between items-start">
