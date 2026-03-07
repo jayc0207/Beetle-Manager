@@ -85,6 +85,62 @@ const decodeShareData = (str) => {
   }
 };
 
+// --- Helper: Fix Safari broken images (Migrate thumbnail to uc?export=view) ---
+const fixDriveUrl = (item) => {
+    if (!item) return item;
+    const fixUrl = (url) => {
+        // 尋找舊版的 thumbnail 網址，將其轉換為不需要 Cookie 的公開網址格式
+        if (typeof url === 'string' && url.includes('drive.google.com/thumbnail') && url.includes('id=')) {
+            const match = url.match(/id=([^&]+)/);
+            if (match && match[1]) {
+                return `https://drive.google.com/uc?export=view&id=${match[1]}`;
+            }
+        }
+        return url;
+    };
+
+    const singleImageFields = ['image', 'specimenImage', 'pupationImage', 'emergenceImage'];
+    singleImageFields.forEach(field => {
+        if (item[field]) item[field] = fixUrl(item[field]);
+    });
+    if (item.images && Array.isArray(item.images)) {
+        item.images = item.images.map(img => fixUrl(img));
+    }
+    return item;
+};
+
+// --- Helper: Compress Image for Mobile/Safari ---
+const compressImage = (file, maxWidth = 1024) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // 輸出為 JPEG，品質 0.7 (大幅減少檔案大小與記憶體佔用)
+        resolve(canvas.toDataURL('image/jpeg', 0.7));
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
+};
+
 // --- Helper: Fetch Public Sheet Data (GViz API) ---
 const fetchPublicSheetData = async (sheetId, targetItemId) => {
     try {
@@ -99,7 +155,8 @@ const fetchPublicSheetData = async (sheetId, targetItemId) => {
         const items = json.table.rows.map(row => {
             try {
                 const cell = row.c && row.c[1];
-                return cell ? JSON.parse(cell.v) : null;
+                // 應用修正函數修復訪客模式的圖片
+                return cell ? fixDriveUrl(JSON.parse(cell.v)) : null;
             } catch(e) { return null; }
         }).filter(i => i !== null);
         
@@ -366,14 +423,18 @@ export default function App() {
     if (shareData) {
       const decoded = decodeShareData(shareData);
       if (decoded) {
-        setSharedItem(decoded);
+        setSharedItem(fixDriveUrl(decoded));
         setView('shared');
         return; 
       }
     }
 
     const savedData = localStorage.getItem('beetle_app_data');
-    if (savedData) setData(JSON.parse(savedData));
+    if (savedData) {
+        // 載入本地資料時套用自動修復
+        const parsed = JSON.parse(savedData).map(fixDriveUrl);
+        setData(parsed);
+    }
 
     // Init Google Scripts (Enhanced robust loading)
     let isMounted = true;
@@ -852,15 +913,32 @@ export default function App() {
     try {
         const q = `mimeType = 'application/vnd.google-apps.folder' and name = '${APP_FOLDER_NAME}' and trashed = false`;
         const response = await window.gapi.client.drive.files.list({ q: q, fields: 'files(id, name)' });
+        let folderId = null;
+
         if (response.result.files && response.result.files.length > 0) {
-            return response.result.files[0].id;
+            folderId = response.result.files[0].id;
         } else {
             const createResponse = await window.gapi.client.drive.files.create({
                 resource: { name: APP_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' },
                 fields: 'id'
             });
-            return createResponse.result.id;
+            folderId = createResponse.result.id;
         }
+
+        // 自動將資料夾權限設為「知道連結的任何人皆可檢視」
+        // 這樣裡面的圖片才能避開 Safari 的第三方 Cookie 阻擋
+        if (folderId) {
+            try {
+                await window.gapi.client.drive.permissions.create({
+                    fileId: folderId,
+                    resource: { role: 'reader', type: 'anyone' }
+                });
+            } catch (permErr) {
+                console.warn("Folder is already public or restricted by workspace:", permErr);
+            }
+        }
+
+        return folderId;
     } catch (e) {
         console.error("Error ensuring app folder:", e);
         return null;
@@ -883,7 +961,9 @@ export default function App() {
 
     const result = await response.json();
     if (result.error) throw result.error;
-    return `https://drive.google.com/thumbnail?authuser=0&sz=w1024&id=${result.id}`;
+    
+    // 使用 uc?export=view 格式，取代原本需要 Cookie 的 thumbnail 連結
+    return `https://drive.google.com/uc?export=view&id=${result.id}`;
   };
 
   const syncWithGoogleSheets = async () => {
@@ -940,7 +1020,8 @@ export default function App() {
         const rows = dataResponse.result.values;
         if (rows && rows.length > 0) {
             const parsedData = rows.map(row => {
-                try { return JSON.parse(row[1]); } catch(e) { return null; }
+                // 套用自動修復，並將修正過的新網址寫回 State
+                try { return fixDriveUrl(JSON.parse(row[1])); } catch(e) { return null; }
             }).filter(item => item !== null);
             setData(parsedData);
             localStorage.setItem('beetle_app_data', JSON.stringify(parsedData));
@@ -1163,14 +1244,19 @@ export default function App() {
     }
   };
 
-  const handleMultiImageUpload = (e) => {
+  const handleMultiImageUpload = async (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      files.forEach(file => {
-          const reader = new FileReader();
-          reader.onloadend = () => { setFormData(prev => ({ ...prev, images: [...prev.images, reader.result] })); };
-          reader.readAsDataURL(file);
-      });
+      try {
+          setStatusMsg('正在處理圖片壓縮...');
+          const compressedImages = await Promise.all(files.map(file => compressImage(file)));
+          setFormData(prev => ({ ...prev, images: [...(prev.images || []), ...compressedImages] }));
+          setStatusMsg('');
+      } catch (err) {
+          console.error("Image compression failed", err);
+          alert("部分圖片處理失敗，請重新上傳。");
+          setStatusMsg('');
+      }
     }
   };
 
@@ -1186,12 +1272,19 @@ export default function App() {
 
   const setCoverImage = (img) => setFormData(prev => ({ ...prev, image: img }));
 
-  const handleImageUpload = (e, fieldName = 'image') => {
+  const handleImageUpload = async (e, fieldName = 'image') => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => setFormData(prev => ({ ...prev, [fieldName]: reader.result }));
-      reader.readAsDataURL(file);
+      try {
+         setStatusMsg('正在處理圖片壓縮...');
+         const compressedBase64 = await compressImage(file);
+         setFormData(prev => ({ ...prev, [fieldName]: compressedBase64 }));
+         setStatusMsg('');
+      } catch (err) {
+         console.error("Image compression failed", err);
+         alert("圖片處理失敗，請換一張圖片試試。");
+         setStatusMsg('');
+      }
     }
   };
 
