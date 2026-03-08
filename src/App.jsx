@@ -462,7 +462,7 @@ export default function App() {
     generation: '', memo: '', acquisitionDate: '', startFeedingDate: '',
     deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
     emergenceImage: null, images: [], image: null, status: 'active',
-    larvaRecords: [], breedingRecords: [], expectedHatchDate: '', id: ''
+    larvaRecords: [], breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', id: ''
   });
 
   // --- Initialization & Google Integration Logic ---
@@ -1252,7 +1252,7 @@ export default function App() {
       parentMale: '', parentFemale: '', generation: '', memo: '', acquisitionDate: '',
       startFeedingDate: '', deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
       emergenceImage: null, images: [], image: null, status: 'active', larvaRecords: [],
-      breedingRecords: [], expectedHatchDate: '', id: Date.now().toString()
+      breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', id: Date.now().toString()
     });
     setEditingItem(null);
     setView('form');
@@ -1266,7 +1266,8 @@ export default function App() {
         scientificName: item.scientificName || '', bloodline: item.bloodline || '',
         images: initImages, image: item.image || (initImages.length > 0 ? initImages[0] : null),
         larvaRecords: item.larvaRecords || [], breedingRecords: item.breedingRecords || [], 
-        expectedHatchDate: item.expectedHatchDate || '', closeDate: item.closeDate || ''
+        expectedHatchDate: item.expectedHatchDate || '', closeDate: item.closeDate || '',
+        expectedSoilChangeDate: item.expectedSoilChangeDate || ''
     });
     setEditingItem(item);
     setView('form');
@@ -1448,6 +1449,13 @@ export default function App() {
       item.expectedHatchDate && 
       !item.closeDate
   ).sort((a, b) => new Date(a.expectedHatchDate) - new Date(b.expectedHatchDate));
+
+  // 計算預計換土名單 (針對幼蟲且未羽化/死亡)
+  const upcomingSoilChanges = data.filter(item => {
+      if (item.type !== 'larva' || !item.expectedSoilChangeDate) return false;
+      const records = item.larvaRecords || [];
+      return !records.some(r => r.stage === '羽化' || r.stage === '死亡');
+  }).sort((a, b) => new Date(a.expectedSoilChangeDate) - new Date(b.expectedSoilChangeDate));
 
   const renderImageViewer = () => {
       if (!viewImage) return null;
@@ -1937,6 +1945,12 @@ export default function App() {
                 ))}
                 <button onClick={addLarvaRecord} className="w-full py-2 border border-dashed border-[#D6CDBF] text-[#8B5E3C] text-xs rounded-lg mt-2 hover:bg-[#FDFBF7]">+ 新增記錄</button>
 
+                <div className="mt-4">
+                   <InputGroup label="預計換土日">
+                     <input type="date" value={formData.expectedSoilChangeDate || ''} onChange={e => setFormData({...formData, expectedSoilChangeDate: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
+                   </InputGroup>
+                </div>
+
                 <div className="pt-4 border-t border-[#F0EBE0] mt-4">
                     <h4 className="font-bold text-[#8B5E3C] text-xs mb-3">重要階段記錄照</h4>
                     <div className="flex gap-3">
@@ -2316,6 +2330,58 @@ export default function App() {
                                      <div className="flex flex-col overflow-hidden mr-2">
                                          <h4 className="font-bold text-[#4A3B32] text-sm truncate">{item.name || '未命名'}</h4>
                                          <p className="text-xs text-[#A09383]">{item.expectedHatchDate}</p>
+                                     </div>
+                                     <div className={`px-2 py-1 rounded-md text-[10px] font-bold border whitespace-nowrap ${statusColor}`}>
+                                         {statusText}
+                                     </div>
+                                     <ChevronRight size={16} className="text-[#D6CDBF] ml-2 flex-shrink-0" />
+                                 </div>
+                             );
+                         })}
+                     </div>
+                 )}
+              </div>
+          </div>
+      )}
+
+      {isSignedIn && (
+          <div className="bg-white rounded-2xl shadow-sm border border-[#F0EBE0] overflow-hidden mb-4">
+              <div className="p-4 border-b border-[#F0EBE0] bg-[#FDFBF7]">
+                 <h3 className="font-bold text-[#8B5E3C] flex items-center gap-2"><Leaf size={18} /> 預計換土提醒</h3>
+              </div>
+              <div className="p-4">
+                 {upcomingSoilChanges.length === 0 ? (
+                     <p className="text-sm text-[#A09383] text-center py-2">目前沒有即將換土的幼蟲</p>
+                 ) : (
+                     <div className="space-y-3">
+                         {upcomingSoilChanges.map(item => {
+                             const today = new Date();
+                             today.setHours(0,0,0,0);
+                             const changeDate = new Date(item.expectedSoilChangeDate);
+                             changeDate.setHours(0,0,0,0);
+                             const diffTime = changeDate - today;
+                             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                             
+                             let statusText = '';
+                             let statusColor = '';
+                             if (diffDays > 0) {
+                                 statusText = `還剩 ${diffDays} 天`;
+                                 statusColor = 'text-green-600 bg-green-50 border-green-200';
+                             } else if (diffDays === 0) {
+                                 statusText = '就是今天！';
+                                 statusColor = 'text-orange-600 bg-orange-50 border-orange-200';
+                             } else {
+                                 statusText = `已過 ${Math.abs(diffDays)} 天`;
+                                 statusColor = 'text-red-600 bg-red-50 border-red-200';
+                             }
+
+                             return (
+                                 <div key={item.id} 
+                                      onClick={() => { setActiveTab('larva'); handleEditItem(item); }}
+                                      className="flex items-center justify-between p-3 rounded-xl border border-[#F0EBE0] hover:bg-[#FDFBF7] cursor-pointer transition-colors active:scale-[0.98]">
+                                     <div className="flex flex-col overflow-hidden mr-2">
+                                         <h4 className="font-bold text-[#4A3B32] text-sm truncate">{item.name || '未命名'}</h4>
+                                         <p className="text-xs text-[#A09383]">{item.expectedSoilChangeDate}</p>
                                      </div>
                                      <div className={`px-2 py-1 rounded-md text-[10px] font-bold border whitespace-nowrap ${statusColor}`}>
                                          {statusText}
