@@ -1850,12 +1850,18 @@ export default function App() {
         </div>
 
         <InputGroup label={formData.type === 'adult' ? "羽化日" : formData.type === 'larva' ? "孵化日" : "建立日期"}>
-          <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
+          <div className="flex items-center bg-[#F5F1E8] rounded-lg pr-3">
+             <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+             {formData.date && <button type="button" onClick={() => setFormData({...formData, date: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+          </div>
         </InputGroup>
 
         {formData.type === 'breeding' && (
             <InputGroup label="關閉日期">
-              <input type="date" value={formData.closeDate} onChange={e => setFormData({...formData, closeDate: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
+              <div className="flex items-center bg-[#F5F1E8] rounded-lg pr-3">
+                 <input type="date" value={formData.closeDate || ''} onChange={e => setFormData({...formData, closeDate: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+                 {formData.closeDate && <button type="button" onClick={() => setFormData({...formData, closeDate: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+              </div>
             </InputGroup>
         )}
 
@@ -1917,7 +1923,10 @@ export default function App() {
                 </div>
 
                <InputGroup label="預計孵化日">
-                 <input type="date" value={formData.expectedHatchDate} onChange={e => setFormData({...formData, expectedHatchDate: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
+                 <div className="flex items-center bg-[#F5F1E8] rounded-lg pr-3">
+                    <input type="date" value={formData.expectedHatchDate || ''} onChange={e => setFormData({...formData, expectedHatchDate: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+                    {formData.expectedHatchDate && <button type="button" onClick={() => setFormData({...formData, expectedHatchDate: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+                 </div>
                </InputGroup>
             </div>
           </div>
@@ -1947,7 +1956,10 @@ export default function App() {
 
                 <div className="mt-4">
                    <InputGroup label="預計換土日">
-                     <input type="date" value={formData.expectedSoilChangeDate || ''} onChange={e => setFormData({...formData, expectedSoilChangeDate: e.target.value})} className="w-full bg-[#F5F1E8] border-none rounded-lg p-3 text-[#4A3B32] font-medium" />
+                     <div className="flex items-center bg-[#F5F1E8] rounded-lg pr-3">
+                        <input type="date" value={formData.expectedSoilChangeDate || ''} onChange={e => setFormData({...formData, expectedSoilChangeDate: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+                        {formData.expectedSoilChangeDate && <button type="button" onClick={() => setFormData({...formData, expectedSoilChangeDate: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+                     </div>
                    </InputGroup>
                 </div>
 
@@ -1998,15 +2010,24 @@ export default function App() {
             <div className="grid grid-cols-1 gap-4">
               <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
                  <label className="text-sm text-[#5C4033]">取得日</label>
-                 <input type="date" value={formData.acquisitionDate} onChange={e => setFormData({...formData, acquisitionDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                 <div className="flex items-center gap-2">
+                    <input type="date" value={formData.acquisitionDate || ''} onChange={e => setFormData({...formData, acquisitionDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                    {formData.acquisitionDate && <button type="button" onClick={() => setFormData({...formData, acquisitionDate: ''})} className="text-[#A09383] hover:text-red-500"><X size={14} /></button>}
+                 </div>
               </div>
               <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
                  <label className="text-sm text-[#5C4033]">開吃日</label>
-                 <input type="date" value={formData.startFeedingDate} onChange={e => setFormData({...formData, startFeedingDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                 <div className="flex items-center gap-2">
+                    <input type="date" value={formData.startFeedingDate || ''} onChange={e => setFormData({...formData, startFeedingDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                    {formData.startFeedingDate && <button type="button" onClick={() => setFormData({...formData, startFeedingDate: ''})} className="text-[#A09383] hover:text-red-500"><X size={14} /></button>}
+                 </div>
               </div>
               <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
                  <label className="text-sm text-[#5C4033]">死亡日</label>
-                 <input type="date" value={formData.deathDate} onChange={e => setFormData({...formData, deathDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                 <div className="flex items-center gap-2">
+                    <input type="date" value={formData.deathDate || ''} onChange={e => setFormData({...formData, deathDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                    {formData.deathDate && <button type="button" onClick={() => setFormData({...formData, deathDate: ''})} className="text-[#A09383] hover:text-red-500"><X size={14} /></button>}
+                 </div>
               </div>
             </div>
 
