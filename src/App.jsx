@@ -465,6 +465,24 @@ export default function App() {
     larvaRecords: [], breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', location: '', id: ''
   });
 
+  // --- UI Text Helper: Auto wrap gender symbols for perfect alignment ---
+  const renderTextWithGender = (text) => {
+      if (!text || typeof text !== 'string') return text;
+      const parts = text.split(/([♂♀])/);
+      return parts.map((part, i) => {
+          if (part === '♂' || part === '♀') {
+              return <span key={i} className="gender-icon">{part}</span>;
+          }
+          return part;
+      });
+  };
+
+  const formatMemoHTML = (htmlStr) => {
+      if (!htmlStr) return '';
+      // 找出非 HTML 標籤內的 ♂ 和 ♀，並用 span 包裹進行樣式修正
+      return htmlStr.replace(/([♂♀])(?![^<]*>)/g, '<span class="gender-icon">$1</span>');
+  };
+
   // --- Initialization & Google Integration Logic ---
 
   useEffect(() => {
@@ -594,11 +612,58 @@ export default function App() {
           const contentW = width - padding * 2;
           const headerH = 80;
           
+          // --- Canvas Text Helper: Fix gender symbol drop issue ---
+          const fillTextWithGenderFix = (context, text, x, y, maxWidth) => {
+              if (!text) return;
+              const str = String(text);
+              if (!str.includes('♂') && !str.includes('♀')) {
+                  context.fillText(truncateText(context, str, maxWidth), x, y);
+                  return;
+              }
+
+              const origFont = context.font;
+              const isBold = origFont.includes('bold');
+              const fontSizeMatch = origFont.match(/(\d+)px/);
+              const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 18;
+              const symbolFont = `${isBold ? 'bold ' : ''}${fontSize + 2}px Arial, sans-serif`;
+
+              let currentX = x;
+              // 將字串依據性別符號拆分
+              const parts = str.split(/([♂♀])/);
+
+              for (let i = 0; i < parts.length; i++) {
+                  const part = parts[i];
+                  if (!part) continue;
+
+                  const isGenderSymbol = part === '♂' || part === '♀';
+                  context.font = isGenderSymbol ? symbolFont : origFont;
+                  
+                  const remainingW = x + maxWidth - currentX;
+                  if (remainingW <= 0) break;
+
+                  let textToDraw = part;
+                  let partW = context.measureText(textToDraw).width;
+                  
+                  if (partW > remainingW) {
+                      if (!isGenderSymbol) {
+                          textToDraw = truncateText(context, textToDraw, remainingW);
+                          context.fillText(textToDraw, currentX, y);
+                      }
+                      break; 
+                  }
+
+                  // 如果是性別符號，向上微調基線 1.5px
+                  context.fillText(textToDraw, currentX, isGenderSymbol ? y - 1.5 : y);
+                  currentX += partW;
+              }
+              context.font = origFont;
+          };
+          
           ctx.fillStyle = '#000000';
           ctx.font = 'bold 36px "Noto Sans TC", sans-serif';
           ctx.textAlign = 'left';
           // 名稱使用最大寬度 contentW (因為這行高度沒有其他元素干擾)
-          ctx.fillText(truncateText(ctx, formData.name || '未命名', contentW), padding, padding + 30);
+          fillTextWithGenderFix(ctx, formData.name || '未命名', padding, padding + 30, contentW);
           
           if (formData.scientificName) {
             ctx.font = 'bold italic 18px "Noto Sans TC", sans-serif';
@@ -618,37 +683,17 @@ export default function App() {
             ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
             ctx.fillStyle = '#000000';
             ctx.textAlign = 'left';
-            ctx.fillText(label1, x1, y);
-            ctx.fillText(label2, x2, y);
+            
+            // 標題也支援符號修正
+            fillTextWithGenderFix(ctx, label1, x1, y, 100);
+            fillTextWithGenderFix(ctx, label2, x2, y, 100);
 
             // 計算數值的最大容許寬度
             const maxValW = colW - 110;
 
-            // 定義支援修復符號偏移的渲染函數
-            const drawValue = (text, xBase, yBase, maxWidth) => {
-                const str = String(text || '-');
-                // 檢查是否以男女符號開頭
-                if (str.startsWith('♂') || str.startsWith('♀')) {
-                    const symbol = str.charAt(0);
-                    const restText = str.slice(1);
-                    
-                    // 單獨為符號設定 Arial 字體，並手動上移修正 iOS Canvas 的偏移
-                    ctx.font = 'bold 20px Arial, sans-serif';
-                    ctx.fillText(symbol, xBase, yBase - 1);
-                    
-                    // 測量符號寬度後，接續繪製剩餘的中文字
-                    const symbolWidth = ctx.measureText(symbol).width;
-                    ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
-                    ctx.fillText(truncateText(ctx, restText, maxWidth - symbolWidth), xBase + symbolWidth, yBase);
-                } else {
-                    // 一般文字正常渲染
-                    ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
-                    ctx.fillText(truncateText(ctx, str, maxWidth), xBase, yBase);
-                }
-            };
-
-            drawValue(val1, x1 + 100, y, maxValW);
-            drawValue(val2, x2 + 100, y, maxValW);
+            // 數值支援符號修正
+            fillTextWithGenderFix(ctx, val1 || '-', x1 + 100, y, maxValW);
+            fillTextWithGenderFix(ctx, val2 || '-', x2 + 100, y, maxValW);
             
             ctx.beginPath();
             ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
@@ -935,7 +980,8 @@ export default function App() {
                   const xPos = padding + 15 + (colIdx * (contentW / 2));
                   const yPos = tableStartY + 55 + rowIdx * 25;
                   
-                  ctx.fillText(lineStr, xPos, yPos);
+                  // 使用修正函式繪製備註文字
+                  fillTextWithGenderFix(ctx, lineStr, xPos, yPos, memoColW);
               }
           }
         }
@@ -1649,7 +1695,7 @@ export default function App() {
                           <div className="w-full h-full flex items-center justify-center text-[#D6CDBF]"><Bug size={64} /></div>
                       )}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-4 pt-12">
-                          <h1 className="text-2xl font-bold text-white">{item.name}</h1>
+                          <h1 className="text-2xl font-bold text-white">{renderTextWithGender(item.name)}</h1>
                           <p className="text-white/80 text-sm font-mono">{item.customId}</p>
                       </div>
                   </div>
@@ -1788,7 +1834,7 @@ export default function App() {
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block flex items-center gap-1">
                                   <Database size={12}/> 飼育筆記
                               </label>
-                              <div className="text-sm text-[#5C4033] whitespace-pre-wrap break-words rte-content" dangerouslySetInnerHTML={{ __html: item.memo }} />
+                              <div className="text-sm text-[#5C4033] whitespace-pre-wrap break-words rte-content" dangerouslySetInnerHTML={{ __html: formatMemoHTML(item.memo) }} />
                           </div>
                       )}
 
@@ -1929,8 +1975,14 @@ export default function App() {
 
         <InputGroup label="累代資訊">
           <div className="grid grid-cols-2 gap-4">
-             <TextInput value={formData.parentMale} onChange={v => setFormData({...formData, parentMale: v})} placeholder="種親 ♂" suffix="mm"/>
-             <TextInput value={formData.parentFemale} onChange={v => setFormData({...formData, parentFemale: v})} placeholder="種親 ♀" suffix="mm"/>
+             <div>
+                 <label className="text-[10px] text-[#A09383] mb-1 block flex items-center gap-1">種親 <span className="gender-icon text-[#8B5E3C]">♂</span></label>
+                 <TextInput value={formData.parentMale} onChange={v => setFormData({...formData, parentMale: v})} placeholder="公蟲體長" suffix="mm"/>
+             </div>
+             <div>
+                 <label className="text-[10px] text-[#A09383] mb-1 block flex items-center gap-1">種親 <span className="gender-icon text-[#8B5E3C]">♀</span></label>
+                 <TextInput value={formData.parentFemale} onChange={v => setFormData({...formData, parentFemale: v})} placeholder="母蟲體長" suffix="mm"/>
+             </div>
           </div>
           <div className="mt-4"><TextInput value={formData.generation} onChange={v => setFormData({...formData, generation: v})} placeholder="累代 (如: CBF1)" /></div>
         </InputGroup>
@@ -2248,7 +2300,7 @@ export default function App() {
                     </div>
                     <div className="flex flex-col px-1 pb-1">
                         <span className="text-[9px] text-[#A09383] font-mono leading-none mb-1">{item.customId}</span>
-                        <h3 className="font-bold text-[#4A3B32] text-sm truncate leading-tight">{item.name || '未命名'}</h3>
+                        <h3 className="font-bold text-[#4A3B32] text-sm truncate leading-tight">{renderTextWithGender(item.name || '未命名')}</h3>
                         <div className="flex items-center gap-1 text-[10px] mt-0.5 truncate">
                             <span className="text-[#A09383] truncate">{item.origin || '未知產地'}</span>
                             {item.location && (
@@ -2289,7 +2341,7 @@ export default function App() {
                         <div className="flex justify-between items-start">
                         <div className="flex flex-col overflow-hidden mr-2">
                             <span className="text-[10px] text-[#A09383] font-mono mb-0.5">{item.customId}</span>
-                            <h3 className="font-bold text-[#4A3B32] truncate">{item.name || '未命名'}</h3>
+                            <h3 className="font-bold text-[#4A3B32] truncate">{renderTextWithGender(item.name || '未命名')}</h3>
                         </div>
                         <div className="flex flex-col items-end gap-1 flex-shrink-0">
                             <span className="text-xs px-2 py-0.5 rounded bg-[#F5F1E8] text-[#8B5E3C]">{item.generation || 'CB'}</span>
