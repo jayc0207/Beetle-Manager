@@ -664,15 +664,16 @@ export default function App() {
                       break; 
                   }
 
-                  // 如果是性別符號，向上微調基線 2px
-                  const drawY = isGenderSymbol ? y - 2 : y;
+                  // 【關鍵修正】如果是性別符號，向下微調基線 2.5px 讓它與中文字對齊 (之前是減去，導致飄太高)
+                  const drawY = isGenderSymbol ? y + 2.5 : y;
                   context.fillText(textToDraw, currentX, drawY);
                   
-                  // 【關鍵修正】如果系統強制用細字體，我們利用描邊(stroke)技術強制把它畫粗！
+                  // 利用描邊(stroke)技術強制把它畫粗！
                   if (isGenderSymbol) {
                       const prevLineWidth = context.lineWidth;
                       const prevStrokeStyle = context.strokeStyle;
-                      context.lineWidth = fontSize * 0.05; // 依據字體大小調整描邊粗細
+                      // 【關鍵修正】減輕描邊粗細，避免符號內的圈圈糊在一起 (從 0.05 降為 0.035)
+                      context.lineWidth = fontSize * 0.035; 
                       context.strokeStyle = context.fillStyle; 
                       context.strokeText(textToDraw, currentX, drawY);
                       context.lineWidth = prevLineWidth;
@@ -2609,7 +2610,7 @@ export default function App() {
             font-family: 'GenderSymbolFix', 'Apple Symbols', 'Segoe UI Symbol', Arial, Helvetica, sans-serif !important; 
             font-weight: 900 !important; 
             display: inline-block; 
-            transform: translateY(-2px); 
+            transform: translateY(1.5px); /* 向下修正對齊中文 */
             line-height: 1; 
             font-size: 1.15em; 
             -webkit-text-stroke: 0.5px currentColor; /* iOS Safari 強制加粗黑科技 */
