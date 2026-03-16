@@ -587,11 +587,23 @@ export default function App() {
       if (showLabelModal && labelCanvasRef.current && formData) {
           const canvas = labelCanvasRef.current;
           const ctx = canvas.getContext('2d');
-          const width = canvas.width;
-          const height = canvas.height;
+          
+          // 設定高解析度縮放 (3倍解析度，讓下載的圖檔更清晰銳利)
+          const scale = 3;
+          const logicalWidth = canvas.width / scale;   // 600
+          const logicalHeight = canvas.height / scale; // 450
     
+          // 重置畫布狀態並填滿白底
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
           ctx.fillStyle = '#FFFFFF';
-          ctx.fillRect(0, 0, width, height);
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          // 放大繪製比例，後續排版邏輯皆使用原始的 logical 尺寸
+          ctx.scale(scale, scale);
+          
+          const width = logicalWidth;
+          const height = logicalHeight;
+
           ctx.strokeStyle = '#000000';
           ctx.lineWidth = 2;
           ctx.textBaseline = 'middle';
@@ -624,8 +636,8 @@ export default function App() {
               const origFont = context.font;
               const fontSizeMatch = origFont.match(/(\d+)px/);
               const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 18;
-              // 強制一律使用粗體 (bold) 繪製性別符號
-              const symbolFont = `bold ${fontSize + 2}px Arial, sans-serif`;
+              // 加入更適合符號的字型備案，確保優先選用
+              const symbolFont = `bold ${fontSize + 2}px "Apple Symbols", "Segoe UI Symbol", Arial, sans-serif`;
 
               let currentX = x;
               // 將字串依據性別符號拆分
@@ -652,8 +664,21 @@ export default function App() {
                       break; 
                   }
 
-                  // 如果是性別符號，向上微調基線 2px 以適應粗體 Arial 的位置
-                  context.fillText(textToDraw, currentX, isGenderSymbol ? y - 2 : y);
+                  // 如果是性別符號，向上微調基線 2px
+                  const drawY = isGenderSymbol ? y - 2 : y;
+                  context.fillText(textToDraw, currentX, drawY);
+                  
+                  // 【關鍵修正】如果系統強制用細字體，我們利用描邊(stroke)技術強制把它畫粗！
+                  if (isGenderSymbol) {
+                      const prevLineWidth = context.lineWidth;
+                      const prevStrokeStyle = context.strokeStyle;
+                      context.lineWidth = fontSize * 0.05; // 依據字體大小調整描邊粗細
+                      context.strokeStyle = context.fillStyle; 
+                      context.strokeText(textToDraw, currentX, drawY);
+                      context.lineWidth = prevLineWidth;
+                      context.strokeStyle = prevStrokeStyle;
+                  }
+
                   currentX += partW;
               }
               context.font = origFont;
@@ -1602,7 +1627,7 @@ export default function App() {
             <button onClick={() => setShowLabelModal(false)} className="text-gray-400"><X size={20} /></button>
           </div>
           <div className="bg-gray-100 p-2 rounded-lg mb-6 overflow-auto max-w-full">
-             <canvas ref={labelCanvasRef} width={600} height={450} className="w-full h-auto bg-white shadow-md" />
+             <canvas ref={labelCanvasRef} width={1800} height={1350} style={{ width: '100%', maxWidth: '600px', height: 'auto' }} className="w-full bg-white shadow-md" />
           </div>
           <div className="flex gap-4 w-full">
              <Button variant="outline" onClick={() => setShowLabelModal(false)} className="flex-1">取消</Button>
@@ -2581,12 +2606,13 @@ export default function App() {
         
         /* 一般的顯示用標籤也同樣強制為粗體 */
         .gender-icon { 
-            font-family: 'GenderSymbolFix', Arial, Helvetica, sans-serif !important; 
-            font-weight: bold !important; 
+            font-family: 'GenderSymbolFix', 'Apple Symbols', 'Segoe UI Symbol', Arial, Helvetica, sans-serif !important; 
+            font-weight: 900 !important; 
             display: inline-block; 
             transform: translateY(-2px); 
             line-height: 1; 
             font-size: 1.15em; 
+            -webkit-text-stroke: 0.5px currentColor; /* iOS Safari 強制加粗黑科技 */
         }
       `}</style>
       {view === 'shared' ? (
