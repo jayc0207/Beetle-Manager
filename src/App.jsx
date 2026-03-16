@@ -622,10 +622,10 @@ export default function App() {
               }
 
               const origFont = context.font;
-              const isBold = origFont.includes('bold');
               const fontSizeMatch = origFont.match(/(\d+)px/);
               const fontSize = fontSizeMatch ? parseInt(fontSizeMatch[1]) : 18;
-              const symbolFont = `${isBold ? 'bold ' : ''}${fontSize + 2}px Arial, sans-serif`;
+              // 強制一律使用粗體 (bold) 繪製性別符號
+              const symbolFont = `bold ${fontSize + 2}px Arial, sans-serif`;
 
               let currentX = x;
               // 將字串依據性別符號拆分
@@ -652,8 +652,8 @@ export default function App() {
                       break; 
                   }
 
-                  // 如果是性別符號，向上微調基線 1.5px
-                  context.fillText(textToDraw, currentX, isGenderSymbol ? y - 1.5 : y);
+                  // 如果是性別符號，向上微調基線 2px 以適應粗體 Arial 的位置
+                  context.fillText(textToDraw, currentX, isGenderSymbol ? y - 2 : y);
                   currentX += partW;
               }
               context.font = origFont;
@@ -2558,6 +2558,18 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#FDFBF7] font-sans text-[#4A3B32]">
       <style>{`
+        /* 運用 unicode-range 來強制擷取特定字元，並映射到系統裡的粗體字形 */
+        @font-face {
+          font-family: 'GenderSymbolFix';
+          src: local('Arial Bold'), local('Arial-BoldMT'), local('Helvetica-Bold'), local('Arial');
+          unicode-range: U+2640, U+2642; /* ♀, ♂ */
+        }
+        
+        /* 讓整個備註編輯框都優先使用我們修正過的符號字體，接著再使用英文字體作為基線參考基準 */
+        .rte-content {
+          font-family: 'GenderSymbolFix', Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        
         .rte-content a { color: #3b82f6; text-decoration: underline; cursor: pointer; }
         .rte-content a:hover { color: #2563eb; }
         .rte-content:empty:before { content: attr(data-placeholder); color: #A09383; pointer-events: none; display: block; }
@@ -2566,7 +2578,16 @@ export default function App() {
         .rte-content font[size="3"] { font-size: 1rem; }
         .rte-content font[size="4"] { font-size: 1.125rem; }
         .rte-content font[size="5"] { font-size: 1.25rem; }
-        .gender-icon { font-family: Arial, Helvetica, sans-serif !important; display: inline-block; transform: translateY(-1px); line-height: 1; font-size: 1.15em; }
+        
+        /* 一般的顯示用標籤也同樣強制為粗體 */
+        .gender-icon { 
+            font-family: 'GenderSymbolFix', Arial, Helvetica, sans-serif !important; 
+            font-weight: bold !important; 
+            display: inline-block; 
+            transform: translateY(-2px); 
+            line-height: 1; 
+            font-size: 1.15em; 
+        }
       `}</style>
       {view === 'shared' ? (
           renderSharedView()
