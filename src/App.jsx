@@ -462,7 +462,7 @@ export default function App() {
     generation: '', memo: '', acquisitionDate: '', startFeedingDate: '',
     deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
     emergenceImage: null, images: [], image: null, status: 'active',
-    larvaRecords: [], breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', id: ''
+    larvaRecords: [], breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', location: '', id: ''
   });
 
   // --- Initialization & Google Integration Logic ---
@@ -1252,7 +1252,7 @@ export default function App() {
       parentMale: '', parentFemale: '', generation: '', memo: '', acquisitionDate: '',
       startFeedingDate: '', deathDate: '', closeDate: '', specimenImage: null, pupationImage: null,
       emergenceImage: null, images: [], image: null, status: 'active', larvaRecords: [],
-      breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', id: Date.now().toString()
+      breedingRecords: [], expectedHatchDate: '', expectedSoilChangeDate: '', location: '', id: Date.now().toString()
     });
     setEditingItem(null);
     setView('form');
@@ -1267,7 +1267,7 @@ export default function App() {
         images: initImages, image: item.image || (initImages.length > 0 ? initImages[0] : null),
         larvaRecords: item.larvaRecords || [], breedingRecords: item.breedingRecords || [], 
         expectedHatchDate: item.expectedHatchDate || '', closeDate: item.closeDate || '',
-        expectedSoilChangeDate: item.expectedSoilChangeDate || ''
+        expectedSoilChangeDate: item.expectedSoilChangeDate || '', location: item.location || ''
     });
     setEditingItem(item);
     setView('form');
@@ -1436,6 +1436,7 @@ export default function App() {
           case 'name': valA = a.name || ''; valB = b.name || ''; break;
           case 'rating': valA = a.rating || 0; valB = b.rating || 0; break;
           case 'date': valA = a.date || ''; valB = b.date || ''; break;
+          case 'location': valA = a.location || ''; valB = b.location || ''; break;
           case 'id': default: valA = a.customId || a.id || ''; valB = b.customId || b.id || ''; break;
       }
       if (valA < valB) return sortOrder === 'asc' ? -1 : 1;
@@ -1646,7 +1647,8 @@ export default function App() {
                               <label className="text-xs font-bold text-[#8B5E3C] mb-2 block">基本數據</label>
                               <ul className="space-y-2 text-sm text-[#4A3B32]">
                                   <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
-                                      <span>性別</span><span>{item.gender === 'male' ? '♂ 公' : item.gender === 'female' ? '♀ 母' : '?'}</span>
+                                      <span>性別</span>
+                                      <span>{item.gender === 'male' ? <span className="flex items-center gap-1"><span className="gender-icon">♂</span>公</span> : item.gender === 'female' ? <span className="flex items-center gap-1"><span className="gender-icon">♀</span>母</span> : '?'}</span>
                                   </li>
                                   <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
                                       <span>{item.type === 'larva' ? '體重' : '體長'}</span>
@@ -1657,6 +1659,9 @@ export default function App() {
                                   </li>
                                   <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
                                       <span>血統</span><span>{item.bloodline || '-'}</span>
+                                  </li>
+                                  <li className="flex justify-between border-b border-[#F0EBE0] pb-1">
+                                      <span>存放位置</span><span>{item.location || '-'}</span>
                                   </li>
                               </ul>
                           </div>
@@ -1834,7 +1839,11 @@ export default function App() {
         {formData.type !== 'breeding' && (
           <InputGroup label="性別">
             <SelectButton 
-              options={[{ label: '? 不明', value: 'unknown' }, { label: '♂ 公', value: 'male' }, { label: '♀ 母', value: 'female' }]}
+              options={[
+                { label: '? 不明', value: 'unknown' }, 
+                { label: <span className="flex items-center justify-center gap-1"><span className="gender-icon">♂</span>公</span>, value: 'male' }, 
+                { label: <span className="flex items-center justify-center gap-1"><span className="gender-icon">♀</span>母</span>, value: 'female' }
+              ]}
               value={formData.gender} onChange={v => setFormData({...formData, gender: v})}
             />
           </InputGroup>
@@ -1849,10 +1858,19 @@ export default function App() {
             )}
         </div>
 
-        <InputGroup label={formData.type === 'adult' ? "羽化日" : formData.type === 'larva' ? "孵化日" : "建立日期"}>
+        <InputGroup label={formData.type === 'adult' ? "取得日" : formData.type === 'larva' ? "孵化日" : "建立日期"}>
           <div className="flex items-center bg-[#F5F1E8] rounded-lg pr-3">
-             <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
-             {formData.date && <button type="button" onClick={() => setFormData({...formData, date: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+             {formData.type === 'adult' ? (
+                 <>
+                     <input type="date" value={formData.acquisitionDate || ''} onChange={e => setFormData({...formData, acquisitionDate: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+                     {formData.acquisitionDate && <button type="button" onClick={() => setFormData({...formData, acquisitionDate: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+                 </>
+             ) : (
+                 <>
+                     <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="w-full bg-transparent border-none p-3 text-[#4A3B32] font-medium focus:outline-none" />
+                     {formData.date && <button type="button" onClick={() => setFormData({...formData, date: ''})} className="text-[#A09383] hover:text-red-500 transition-colors p-1"><X size={16} /></button>}
+                 </>
+             )}
           </div>
         </InputGroup>
 
@@ -1899,6 +1917,10 @@ export default function App() {
              onChange={val => setFormData({...formData, memo: val})}
              placeholder="記錄飼育細節、心情分享、或加入相關網頁連結..."
           />
+        </InputGroup>
+
+        <InputGroup label="存放位置">
+          <TextInput value={formData.location} onChange={v => setFormData({...formData, location: v})} placeholder="例如：溫控櫃A層、客廳架子..." />
         </InputGroup>
 
         {formData.type === 'breeding' && (
@@ -2009,10 +2031,10 @@ export default function App() {
             <h3 className="font-bold text-[#8B5E3C] text-xs flex items-center gap-1"><Calendar size={14} /> 生命歷程 (成蟲限定)</h3>
             <div className="grid grid-cols-1 gap-4">
               <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
-                 <label className="text-sm text-[#5C4033]">取得日</label>
+                 <label className="text-sm text-[#5C4033]">羽化日</label>
                  <div className="flex items-center gap-2">
-                    <input type="date" value={formData.acquisitionDate || ''} onChange={e => setFormData({...formData, acquisitionDate: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
-                    {formData.acquisitionDate && <button type="button" onClick={() => setFormData({...formData, acquisitionDate: ''})} className="text-[#A09383] hover:text-red-500"><X size={14} /></button>}
+                    <input type="date" value={formData.date || ''} onChange={e => setFormData({...formData, date: e.target.value})} className="bg-transparent text-right text-sm text-[#8B5E3C] focus:outline-none" />
+                    {formData.date && <button type="button" onClick={() => setFormData({...formData, date: ''})} className="text-[#A09383] hover:text-red-500"><X size={14} /></button>}
                  </div>
               </div>
               <div className="flex items-center justify-between border-b border-[#F0EBE0] pb-2">
@@ -2076,10 +2098,10 @@ export default function App() {
 
         {view === 'list' && activeTab !== 'settings' && (
             <button 
-                onClick={() => { const modes = ['id', 'name', 'rating', 'date']; setSortBy(modes[(modes.indexOf(sortBy) + 1) % modes.length]); }}
+                onClick={() => { const modes = ['id', 'name', 'rating', 'date', 'location']; setSortBy(modes[(modes.indexOf(sortBy) + 1) % modes.length]); }}
                 className="flex flex-col items-center justify-center w-8 h-8 rounded-full bg-[#E8E1D5] text-[#8B5E3C] text-[10px] font-bold" title={`排序依據: ${sortBy}`}
             >
-                {sortBy === 'id' && '編號'}{sortBy === 'name' && '名稱'}{sortBy === 'rating' && '星星'}{sortBy === 'date' && '日期'}
+                {sortBy === 'id' && '編號'}{sortBy === 'name' && '名稱'}{sortBy === 'rating' && '星星'}{sortBy === 'date' && '日期'}{sortBy === 'location' && '位置'}
             </button>
         )}
 
@@ -2203,7 +2225,15 @@ export default function App() {
                     <div className="flex flex-col px-1 pb-1">
                         <span className="text-[9px] text-[#A09383] font-mono leading-none mb-1">{item.customId}</span>
                         <h3 className="font-bold text-[#4A3B32] text-sm truncate leading-tight">{item.name || '未命名'}</h3>
-                        <p className="text-[10px] text-[#A09383] truncate mt-0.5">{item.origin || '未知產地'}</p>
+                        <div className="flex items-center gap-1 text-[10px] mt-0.5 truncate">
+                            <span className="text-[#A09383] truncate">{item.origin || '未知產地'}</span>
+                            {item.location && (
+                                <>
+                                    <span className="text-[#D6CDBF]">•</span>
+                                    <span className="truncate text-[#8B5E3C]">{item.location}</span>
+                                </>
+                            )}
+                        </div>
                         <div className="mt-1.5 flex items-center justify-between">
                             {item.type === 'breeding' ? (
                                 <span className="text-[9px] text-[#A09383] truncate">{item.date} {item.closeDate ? `~ ${item.closeDate}` : ''}</span>
@@ -2211,7 +2241,8 @@ export default function App() {
                                 <>
                                     {(item.gender !== 'unknown' || item.type === 'larva') && (
                                         <span className={`flex items-center gap-0.5 text-xs font-bold ${item.gender === 'male' ? 'text-blue-500' : item.gender === 'female' ? 'text-red-500' : 'text-[#8B5E3C]'}`}>
-                                            {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
+                                            {item.gender === 'male' ? <span className="gender-icon">♂</span> : item.gender === 'female' ? <span className="gender-icon">♀</span> : '?'}
+                                            <span className="ml-0.5">{item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}</span>
                                         </span>
                                     )}
                                     {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
@@ -2242,11 +2273,20 @@ export default function App() {
                         </div>
                         </div>
                         {item.scientificName && (<p className="text-xs text-[#8B5E3C] italic -mt-0.5 mb-1 truncate">{item.scientificName}</p>)}
-                        <p className="text-xs text-[#A09383] truncate">{item.origin || '未知產地'}</p>
+                        <div className="flex items-center gap-1 text-xs truncate">
+                            <span className="text-[#A09383] truncate">{item.origin || '未知產地'}</span>
+                            {item.location && (
+                                <>
+                                    <span className="text-[#D6CDBF]">•</span>
+                                    <span className="truncate text-[#8B5E3C]">{item.location}</span>
+                                </>
+                            )}
+                        </div>
                         <div className="mt-2 flex items-center gap-3 text-sm">
                         {(item.gender !== 'unknown' || item.type === 'larva') && (
                             <span className={`flex items-center gap-1 ${item.gender === 'male' ? 'text-blue-500' : item.gender === 'female' ? 'text-red-500' : 'text-[#8B5E3C]'}`}>
-                            {item.gender === 'male' ? '♂' : item.gender === 'female' ? '♀' : '?'} {item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}
+                            {item.gender === 'male' ? <span className="gender-icon">♂</span> : item.gender === 'female' ? <span className="gender-icon">♀</span> : '?'} 
+                            <span>{item.type === 'adult' ? `${item.size}mm` : `${lastWeight}g`}</span>
                             </span>
                         )}
                         {item.type === 'larva' && item.larvaRecords && item.larvaRecords.length > 0 && (
@@ -2450,6 +2490,7 @@ export default function App() {
         .rte-content font[size="3"] { font-size: 1rem; }
         .rte-content font[size="4"] { font-size: 1.125rem; }
         .rte-content font[size="5"] { font-size: 1.25rem; }
+        .gender-icon { font-family: Arial, Helvetica, sans-serif !important; display: inline-block; transform: translateY(-1px); line-height: 1; font-size: 1.15em; }
       `}</style>
       {view === 'shared' ? (
           renderSharedView()
