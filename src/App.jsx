@@ -623,8 +623,32 @@ export default function App() {
 
             // 計算數值的最大容許寬度
             const maxValW = colW - 110;
-            ctx.fillText(truncateText(ctx, val1 || '-', maxValW), x1 + 100, y); 
-            ctx.fillText(truncateText(ctx, val2 || '-', maxValW), x2 + 100, y);
+
+            // 定義支援修復符號偏移的渲染函數
+            const drawValue = (text, xBase, yBase, maxWidth) => {
+                const str = String(text || '-');
+                // 檢查是否以男女符號開頭
+                if (str.startsWith('♂') || str.startsWith('♀')) {
+                    const symbol = str.charAt(0);
+                    const restText = str.slice(1);
+                    
+                    // 單獨為符號設定 Arial 字體，並手動上移修正 iOS Canvas 的偏移
+                    ctx.font = 'bold 20px Arial, sans-serif';
+                    ctx.fillText(symbol, xBase, yBase - 1);
+                    
+                    // 測量符號寬度後，接續繪製剩餘的中文字
+                    const symbolWidth = ctx.measureText(symbol).width;
+                    ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+                    ctx.fillText(truncateText(ctx, restText, maxWidth - symbolWidth), xBase + symbolWidth, yBase);
+                } else {
+                    // 一般文字正常渲染
+                    ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+                    ctx.fillText(truncateText(ctx, str, maxWidth), xBase, yBase);
+                }
+            };
+
+            drawValue(val1, x1 + 100, y, maxValW);
+            drawValue(val2, x2 + 100, y, maxValW);
             
             ctx.beginPath();
             ctx.strokeStyle = '#000000'; // 線條加粗並改為黑色
