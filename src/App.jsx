@@ -692,8 +692,9 @@ export default function App() {
           fillTextWithGenderFix(ctx, formData.name || '未命名', padding, padding + 30, contentW);
           
           if (formData.scientificName) {
-            ctx.font = 'bold italic 18px "Noto Sans TC", sans-serif';
-            ctx.fillStyle = '#555555';
+            // 【重要修改】將學名的字體改為一般(移除 italic 斜體)，並將顏色加深為黑色 (#000000)
+            ctx.font = 'bold 18px "Noto Sans TC", sans-serif';
+            ctx.fillStyle = '#000000';
             ctx.fillText(truncateText(ctx, formData.scientificName, contentW - 200), padding, padding + 60);
           }
     
